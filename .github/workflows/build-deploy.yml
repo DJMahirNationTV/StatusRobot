@@ -19,7 +19,7 @@ jobs:
           node-version: '22'
 
       - name: Build Frontend
-        working-directory: frontend
+        working-directory: client
         run: |
           npm ci
           npm run build
