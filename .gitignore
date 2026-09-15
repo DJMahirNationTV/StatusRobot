@@ -1,0 +1,71 @@
+# Backend (Server) Ignored:
+
+### Java ###
+# Compiled class file
+server/*.class
+
+# Log file
+server/*.log
+
+# BlueJ files
+server/*.ctxt
+
+# Mobile Tools for Java (J2ME)
+server/.mtj.tmp/
+
+# Package Files #
+server/*.jar
+server/*.war
+server/*.nar
+server/*.ear
+server/server/*.zip
+server/*.tar.gz
+server/*.rar
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+server/hs_err_pid*
+server/replay_pid*
+
+# Frontend (Client)
+
+# Created by https://www.toptal.com/developers/gitignore/api/react,vuejs
+# Edit at https://www.toptal.com/developers/gitignore?templates=react,vuejs
+
+### react ###
+client/.DS_*
+client/*.log
+client/logs
+client/**/*.backup.*
+client/**/*.back.*
+
+client/node_modules
+client/bower_components
+
+client/*.sublime*
+
+client/psd
+client/thumb
+client/sketch
+
+### Vuejs ###
+# Recommended template: Node.gitignore
+.DS_*
+*.log
+logs
+backup/
+node_modules/
+dist/
+npm-debug.log
+yarn-error.log
+.env
+# ---
+client/node_modules/
+client/dist/
+client/npm-debug.log
+client/yarn-error.log
+
+client/.env
+client/.env.development.local
+client/.env.test.local
+client/.env.production.local
+client/.env.local
