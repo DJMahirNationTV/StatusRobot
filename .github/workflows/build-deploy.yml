@@ -44,12 +44,6 @@ jobs:
           java-version: '25'
           cache: 'maven'
 
-      - name: Download Frontend Build
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: server/src/main/resources/static
-
       - name: Make Maven Wrapper Executable
         run: chmod +x backend/mvnw
 
