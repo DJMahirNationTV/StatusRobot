@@ -34,19 +34,21 @@ public class Monitor {
     @Column(nullable = false)
     private MonitorStatus status = MonitorStatus.PAUSED;
 
+    @Column(columnDefinition = "DATETIME")
     private Instant lastCheckedAt;
 
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false, updatable = false, columnDefinition = "DATETIME")
     private Instant createdAt = Instant.now();
 
     public Monitor() {
     }
 
-    public Monitor(String name, String url, int intervalSeconds, int timeoutSeconds) {
+    public Monitor(String name, String url, String httpMethod, int intervalSeconds, int timeoutSeconds) {
         this.name = name;
         this.url = url;
-        this.intervalSeconds = intervalSeconds;
-        this.timeoutSeconds = timeoutSeconds;
+        this.httpMethod = (httpMethod != null && !httpMethod.isBlank()) ? httpMethod.toUpperCase() : "GET";
+        this.intervalSeconds = intervalSeconds > 0 ? intervalSeconds : 60;
+        this.timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 5;
     }
 
     public void setId(Long id) {
