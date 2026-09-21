@@ -44,6 +44,11 @@ jobs:
           java-version: '25'
           cache: 'maven'
 
+      - name: Build and analyze
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=statusrobot_security-statusrobot
+
       - name: Make Maven Wrapper Executable
         run: chmod +x server/mvnw
 
