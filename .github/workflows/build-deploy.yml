@@ -70,12 +70,12 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_HOST: localhost
           DB_PORT: 3306
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_NAME: statusrobot
+          MONGODB_URI: mongodb://localhost:27017/statusrobot_logs
         run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=statusrobot_security-statusrobot
 
       - name: Make Maven Wrapper Executable
