@@ -1,20 +1,13 @@
 package com.djmahirnationtv.status.backend;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
-import org.springframework.boot.mongodb.autoconfigure.MongoAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
-@EnableAutoConfiguration(exclude = {
-	DataSourceAutoConfiguration.class,
-	MongoAutoConfiguration.class
-})
+@ActiveProfiles("test")
 class BackendApplicationTests {
-
 	@Test
 	void contextLoads() {
 	}
-
 }
