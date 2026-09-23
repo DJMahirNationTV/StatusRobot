@@ -5,6 +5,7 @@ import com.djmahirnationtv.status.backend.monitor.model.MonitorStatus;
 import com.djmahirnationtv.status.backend.monitor.dto.MonitorResponse;
 import com.djmahirnationtv.status.backend.monitor.dto.CreateMonitorRequest;
 import com.djmahirnationtv.status.backend.monitor.repository.MonitorRepository;
+import com.djmahirnationtv.status.backend.ping.repository.PingLogRepository;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Service;
@@ -15,9 +16,11 @@ import java.util.List;
 public class MonitorService {
 
     private final MonitorRepository monitorRepository;
+    private final PingLogRepository pingLogRepository;
 
-    public MonitorService(MonitorRepository monitorRepository) {
+    public MonitorService(MonitorRepository monitorRepository, PingLogRepository pingLogRepository) {
         this.monitorRepository = monitorRepository;
+        this.pingLogRepository = pingLogRepository;
     }
 
     public List<MonitorResponse> getAllMonitors() {
@@ -65,5 +68,7 @@ public class MonitorService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Monitor not found");
         }
         monitorRepository.deleteById(id);
+        pingLogRepository.deleteByMonitorId(id); // deletes the logs from mongodb (using id)
     }
+
 }
