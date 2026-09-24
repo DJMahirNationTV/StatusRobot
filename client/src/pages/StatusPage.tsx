@@ -5,32 +5,43 @@ import { UptimeBar } from '../components/UptimeBar';
 
 export const StatusPage: React.FC = () => {
   const [monitors, setMonitors] = useState<MonitorWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const loadData = async () => {
-    try {
-      const list = await api.getMonitors();
-      const detailed = await Promise.all(
-        list.map(async (m) => {
-          const [stats, pings] = await Promise.all([
-            api.getStats(m.id).catch(() => undefined),
-            api.getRecentPings(m.id, 30).catch(() => [])
-          ]);
-          return { ...m, stats, pings };
-        })
-      );
-      setMonitors(detailed);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [loading, setLoading] = useState(true); // alr true by default
 
   useEffect(() => {
-    loadData()
-    const interval = setInterval(loadData, 30000); // 30s Auto-Refresh
-    return () => clearInterval(interval);
+    let isMounted = true;
+    const fetchData = async () => {
+      try {
+        const list = await api.getMonitors();
+        const detailed = await Promise.all(
+          list.map(async (m) => {
+            const [stats, pings] = await Promise.all([
+              api.getStats(m.id).catch(() => undefined),
+              api.getRecentPings(m.id, 30).catch(() => [])
+            ]);
+            return { ...m, stats, pings };
+          })
+        );
+
+        if (isMounted) {
+          setMonitors(detailed);
+        }
+      } catch (err) {
+        console.error('Failed to load status data:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false); // executes only when async complete
+        }
+      }
+    };
+
+    // Initial fetch (all state updates are deferred until after await resolves)
+    fetchData();
+
+    const interval = setInterval(fetchData, 30000); // 30 sec
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const allOperational = monitors.every(
@@ -38,7 +49,7 @@ export const StatusPage: React.FC = () => {
   );
 
   if (loading) {
-    return <div className="p-8 text-zinc-400">Lade Statusdaten...</div>;
+    return <div className="p-8 text-zinc-400">Load Status pages...</div>;
   }
 
   return (
