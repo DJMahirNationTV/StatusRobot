@@ -2,7 +2,7 @@ export interface Monitor {
   id: number;
   name: string;
   url: string;
-  active: boolean;
+  status: 'UP' | 'DOWN' | 'DEGRADED' | 'PAUSED';
 }
 
 export interface MonitorStats {
