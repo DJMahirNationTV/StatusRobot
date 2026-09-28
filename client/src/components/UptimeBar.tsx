@@ -1,28 +1,20 @@
-import React from 'react';
-import type {PingLog} from '../types/monitor';
+import type { PingLog } from '../types/monitor'
 
-interface Props {
-  pings: PingLog[];
-}
-
-export const UptimeBar: React.FC<Props> = ({ pings }) => {
-  // Old stuff on the left and the new on the Right
-  const orderedPings = [...pings].reverse();
+export function UptimeBar({ pings }: { pings: PingLog[] }) {
+  const orderedPings = [...pings].reverse()
 
   return (
-    <div className="flex items-center gap-1 w-full h-8 bg-zinc-900/40 p-1 rounded-md border border-zinc-800">
-      {orderedPings.map((ping) => {
-        const isSuccess = ping.successful && ping.statusCode >= 200 && ping.statusCode < 300;
-        return (
-          <div
+    <div>
+      <div className="flex h-9 w-full gap-1" role="img" aria-label={`${pings.filter(ping => ping.successful).length} of the last ${pings.length} checks were successful`}>
+        {orderedPings.map(ping => (
+          <span
             key={ping.id}
-            className={`flex-1 h-full rounded-xs transition-opacity hover:opacity-80 cursor-pointer ${
-              isSuccess ? 'bg-emerald-500' : 'bg-rose-500'
-            }`}
-            title={`${new Date(ping.timestamp).toLocaleTimeString()}: ${ping.statusCode || 'ERR'} (${ping.responseTimeMs}ms)`}
+            className={`h-full min-w-0 flex-1 rounded-sm transition-opacity hover:opacity-75 ${ping.successful ? 'bg-[#55a56b]' : 'bg-rose-500'}`}
+            title={`${new Date(ping.timestamp).toLocaleString()}: ${ping.statusCode || 'Error'} (${ping.responseTimeMs} ms)`}
           />
-        );
-      })}
+        ))}
+      </div>
+      <div className="mt-2 flex justify-between text-[10px] text-muted"><span>Earlier checks</span><span>Latest check</span></div>
     </div>
-  );
-};
+  )
+}
