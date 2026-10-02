@@ -4,6 +4,7 @@ import com.djmahirnationtv.status.backend.monitor.dto.MonitorResponse;
 import com.djmahirnationtv.status.backend.monitor.dto.CreateMonitorRequest;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import jakarta.validation.Valid;
 import java.util.List;
 
@@ -29,18 +30,18 @@ public class MonitorController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public MonitorResponse create(@Valid @RequestBody CreateMonitorRequest request) {
-        return monitorService.createMonitor(request);
+    public MonitorResponse create(@Valid @RequestBody CreateMonitorRequest request, Authentication authentication) {
+        return monitorService.createMonitor(request, Long.valueOf(authentication.getName()));
     }
 
     @PatchMapping("/{id}/toggle-pause")
-    public MonitorResponse togglePause(@PathVariable Long id) {
-        return monitorService.togglePause(id);
+    public MonitorResponse togglePause(@PathVariable Long id, Authentication authentication) {
+        return monitorService.togglePause(id, Long.valueOf(authentication.getName()));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
-        monitorService.deleteMonitor(id);
+    public void delete(@PathVariable Long id, Authentication authentication) {
+        monitorService.deleteMonitor(id, Long.valueOf(authentication.getName()));
     }
 }

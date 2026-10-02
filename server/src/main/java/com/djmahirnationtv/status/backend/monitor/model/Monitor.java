@@ -15,6 +15,9 @@ public class Monitor {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "owner_id")
+    private Long ownerId;
+
     @Column(nullable = false)
     private String name;
 
@@ -53,6 +56,10 @@ public class Monitor {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public void setOwnerId(Long ownerId) {
+        this.ownerId = ownerId;
     }
 
     public void setName(String name) {

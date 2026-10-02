@@ -75,6 +75,10 @@
     @apply transition-colors hover:text-green;
   }
 
+  .form-input {
+    @apply w-full rounded-lg border border-line bg-canvas px-3.5 py-3 text-sm text-ink placeholder:text-muted/70 disabled:opacity-60;
+  }
+
   .eyebrow {
     @apply text-[11px] font-bold uppercase tracking-[0.16em] text-green;
   }

@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @Configuration
 @EnableJpaRepositories(basePackages = {
     "com.djmahirnationtv.status.backend.monitor.repository",
+    "com.djmahirnationtv.status.backend.auth",
 })
 public class JpaConfig {
 }
