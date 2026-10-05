@@ -14,13 +14,6 @@ function subscribeToLocation(callback: () => void) {
   return () => window.removeEventListener('hashchange', callback)
 }
 
-const repositoryUrl = 'https://github.com/DJMahirNationTV/StatusRobot'
-
-function subscribeToLocation(callback: () => void) {
-  window.addEventListener('hashchange', callback)
-  return () => window.removeEventListener('hashchange', callback)
-}
-
 function App() {
   const hash = useSyncExternalStore(subscribeToLocation, () => window.location.hash, () => '')
   const [route, query = ''] = hash.split('?')
