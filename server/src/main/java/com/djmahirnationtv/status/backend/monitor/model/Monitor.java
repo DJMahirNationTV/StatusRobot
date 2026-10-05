@@ -15,6 +15,10 @@ public class Monitor {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    @Column(nullable = false, columnDefinition = "BIGINT DEFAULT 0")
+    private long version;
+
     @Column(name = "owner_id")
     private Long ownerId;
 

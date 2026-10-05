@@ -8,12 +8,13 @@ import com.djmahirnationtv.status.backend.ping.repository.PingLogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
 import java.time.Instant;
+import java.time.Duration;
 
 @Service
 public class PingExecutionService {
@@ -38,7 +39,10 @@ public class PingExecutionService {
         try {
             HttpMethod method = HttpMethod.valueOf(monitor.getHttpMethod().toUpperCase());
 
-            var response = pingRestClient.method(method)
+            var factory = new SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(Duration.ofSeconds(monitor.getTimeoutSeconds()));
+            factory.setReadTimeout(Duration.ofSeconds(monitor.getTimeoutSeconds()));
+            var response = pingRestClient.mutate().requestFactory(factory).build().method(method)
                     .uri(monitor.getUrl())
                     .exchange((req, res) -> {
                         return new PingResult(res.getStatusCode().value());

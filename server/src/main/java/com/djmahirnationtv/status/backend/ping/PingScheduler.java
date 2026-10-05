@@ -5,11 +5,15 @@ import com.djmahirnationtv.status.backend.monitor.model.MonitorStatus;
 import com.djmahirnationtv.status.backend.monitor.repository.MonitorRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.List;
 
 @Component
 public class PingScheduler {
+    private static final Logger log = LoggerFactory.getLogger(PingScheduler.class);
     private final MonitorRepository monitorRepository;
     private final PingExecutionService pingExecutionService;
 
@@ -25,7 +29,11 @@ public class PingScheduler {
 
         for (Monitor monitor : activeMonitors) {
             if (isDueForPing(monitor, now)) {
-                pingExecutionService.ping(monitor);
+                try {
+                    pingExecutionService.ping(monitor);
+                } catch (ObjectOptimisticLockingFailureException exception) {
+                    log.debug("Monitor {} changed during its check; keeping the newer settings", monitor.getId());
+                }
             }
         }
     }

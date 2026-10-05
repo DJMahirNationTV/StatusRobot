@@ -26,10 +26,14 @@ async function request(path: string, options: RequestInit = {}) {
   }
 }
 
-async function post(path: string, body?: BodyInit, contentType?: string) {
+export async function csrfHeaders(): Promise<Record<string, string>> {
   const csrfResponse = await checkResponse(await request('/csrf'))
   const csrf: { token: string; headerName: string } = await csrfResponse.json()
-  const headers: Record<string, string> = { [csrf.headerName]: csrf.token }
+  return { [csrf.headerName]: csrf.token }
+}
+
+async function post(path: string, body?: BodyInit, contentType?: string) {
+  const headers = await csrfHeaders()
   if (contentType) headers['Content-Type'] = contentType
   return checkResponse(await request(path, { method: 'POST', headers, body }))
 }

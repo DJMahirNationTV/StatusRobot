@@ -22,7 +22,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class OAuthUserServiceTests {
     private final AuthService auth = mock(AuthService.class);
     private final ClientRegistrationRepository providers = new OAuthConfig().clientRegistrations(new MockEnvironment()
-            .withProperty("app.oauth.redirect-base-url", "https://status.example.test")
+            .withProperty("app.oauth.redirect-base-url", "https://status.djmahirnationtv.com")
             .withProperty("app.oauth.github.client-id", "github-test-id")
             .withProperty("app.oauth.github.client-secret", "test-secret")
             .withProperty("app.oauth.discord.client-id", "discord-test-id")

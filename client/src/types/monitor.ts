@@ -2,8 +2,15 @@ export interface Monitor {
   id: number;
   name: string;
   url: string;
+  httpMethod: 'GET' | 'HEAD' | 'POST';
+  intervalSeconds: number;
+  timeoutSeconds: number;
+  lastCheckedAt: string | null;
+  createdAt: string;
   status: 'UP' | 'DOWN' | 'DEGRADED' | 'PAUSED';
 }
+
+export type MonitorInput = Pick<Monitor, 'name' | 'url' | 'httpMethod' | 'intervalSeconds' | 'timeoutSeconds'>;
 
 export interface MonitorStats {
   monitorId: number;

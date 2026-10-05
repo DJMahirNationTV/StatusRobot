@@ -42,6 +42,7 @@ public class SecurityConfig {
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/auth/providers").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/monitors/mine").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/monitors", "/api/monitors/*",
                                 "/api/monitors/*/pings", "/api/monitors/*/stats").permitAll()
                         .anyRequest().authenticated())
@@ -55,7 +56,7 @@ public class SecurityConfig {
                 .oauth2Login(oauth -> oauth
                         .loginPage(frontendUrl + "/#login")
                         .userInfoEndpoint(info -> info.userService(oauthUsers))
-                        .defaultSuccessUrl(frontendUrl + "/#account", true)
+                        .defaultSuccessUrl(frontendUrl + "/#dashboard", true)
                         .failureHandler((request, response, exception) -> {
                             String code = exception instanceof OAuth2AuthenticationException oauthException
                                     ? oauthException.getError().getErrorCode() : "oauth";
