@@ -19,6 +19,33 @@ import static org.mockito.Mockito.*;
 
 class PingExecutionServiceTests {
     @Test
+    void publishesOutageAndRecoveryOnlyWhenAvailabilityChanges() throws Exception {
+        var status = new java.util.concurrent.atomic.AtomicInteger(503);
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/health", exchange -> {
+            exchange.sendResponseHeaders(status.get(), -1);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var events = mock(org.springframework.context.ApplicationEventPublisher.class);
+            var service = new PingExecutionService(RestClient.create(), mock(PingLogRepository.class), mock(MonitorRepository.class), events);
+            var monitor = new Monitor("Website", "http://127.0.0.1:" + server.getAddress().getPort() + "/health", "GET", 60, 5);
+            monitor.setId(1L);
+            monitor.setOwnerId(2L);
+            monitor.setStatus(MonitorStatus.UP);
+            service.ping(monitor);
+            service.ping(monitor);
+            status.set(200);
+            service.ping(monitor);
+            service.ping(monitor);
+            verify(events).publishEvent(new com.djmahirnationtv.status.backend.integration.MonitorStatusChanged(1L, 2L, "Website", true));
+            verify(events).publishEvent(new com.djmahirnationtv.status.backend.integration.MonitorStatusChanged(1L, 2L, "Website", false));
+            verifyNoMoreInteractions(events);
+        } finally { server.stop(0); }
+    }
+
+    @Test
     void usesTheMonitorsTimeoutWhenTheWebsiteDoesNotRespond() throws Exception {
         var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         var release = new CountDownLatch(1);
@@ -35,7 +62,7 @@ class PingExecutionServiceTests {
         try {
             var monitors = mock(MonitorRepository.class);
             var pings = mock(PingLogRepository.class);
-            var service = new PingExecutionService(RestClient.create(), pings, monitors);
+            var service = new PingExecutionService(RestClient.create(), pings, monitors, mock(org.springframework.context.ApplicationEventPublisher.class));
             var monitor = new Monitor("Slow website", "http://127.0.0.1:" + server.getAddress().getPort() + "/slow", "GET", 60, 1);
             monitor.setId(1L);
 

@@ -7,6 +7,9 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.AssertTrue;
 import org.hibernate.validator.constraints.URL;
+import java.util.List;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 public record MonitorRequest(
     @NotBlank(message = "Name is required")
@@ -27,7 +30,9 @@ public record MonitorRequest(
     int intervalSeconds,
     @Min(value = 1, message = "Timeout must be at least 1 second")
     @Max(value = 30, message = "Timeout must be at most 30 seconds")
-    int timeoutSeconds
+    int timeoutSeconds,
+    @Size(max = 20, message = "Select up to 20 integrations")
+    List<@NotNull @Positive Long> integrationIds
 ) {
     @AssertTrue(message = "Timeout cannot be longer than the check interval")
     public boolean isTimeoutWithinInterval() {
