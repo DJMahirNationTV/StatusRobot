@@ -3,7 +3,7 @@ package com.djmahirnationtv.status.backend.monitor;
 import com.djmahirnationtv.status.backend.monitor.model.Monitor;
 import com.djmahirnationtv.status.backend.monitor.model.MonitorStatus;
 import com.djmahirnationtv.status.backend.monitor.dto.MonitorResponse;
-import com.djmahirnationtv.status.backend.monitor.dto.CreateMonitorRequest;
+import com.djmahirnationtv.status.backend.monitor.dto.MonitorRequest;
 import com.djmahirnationtv.status.backend.monitor.repository.MonitorRepository;
 import com.djmahirnationtv.status.backend.ping.repository.PingLogRepository;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,10 +36,10 @@ public class MonitorService {
     }
 
     @Transactional
-    public MonitorResponse createMonitor(CreateMonitorRequest req, Long ownerId) {
+    public MonitorResponse createMonitor(MonitorRequest req, Long ownerId) {
         Monitor monitor = new Monitor(
-            req.name(),
-            req.url(),
+            req.name().strip(),
+            req.url().strip(),
             req.httpMethod(),
             req.intervalSeconds(),
             req.timeoutSeconds()
@@ -49,12 +49,31 @@ public class MonitorService {
         return MonitorResponse.from(monitorRepository.save(monitor));
     }
 
+    public List<MonitorResponse> getOwnedMonitors(Long ownerId) {
+        return monitorRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId).stream()
+                .map(MonitorResponse::from).toList();
+    }
+
+    @Transactional
+    public MonitorResponse updateMonitor(Long id, MonitorRequest req, Long ownerId) {
+        Monitor monitor = ownedMonitor(id, ownerId);
+        boolean targetChanged = !monitor.getUrl().equals(req.url()) || !monitor.getHttpMethod().equals(req.httpMethod());
+        monitor.setName(req.name().strip());
+        monitor.setUrl(req.url().strip());
+        monitor.setHttpMethod(req.httpMethod());
+        monitor.setIntervalSeconds(req.intervalSeconds());
+        monitor.setTimeoutSeconds(req.timeoutSeconds());
+        if (targetChanged) monitor.setLastCheckedAt(null);
+        return MonitorResponse.from(monitorRepository.save(monitor));
+    }
+
     @Transactional
     public MonitorResponse togglePause(Long id, Long ownerId) {
         Monitor monitor = ownedMonitor(id, ownerId);
 
         if (monitor.getStatus() == MonitorStatus.PAUSED) {
             monitor.setStatus(MonitorStatus.UP);
+            monitor.setLastCheckedAt(null);
         } else {
             monitor.setStatus(MonitorStatus.PAUSED);
         }

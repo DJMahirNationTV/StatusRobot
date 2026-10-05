@@ -79,6 +79,10 @@
     @apply w-full rounded-lg border border-line bg-canvas px-3.5 py-3 text-sm text-ink placeholder:text-muted/70 disabled:opacity-60;
   }
 
+  .dashboard-action {
+    @apply inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-xs font-medium hover:bg-sage disabled:opacity-50;
+  }
+
   .eyebrow {
     @apply text-[11px] font-bold uppercase tracking-[0.16em] text-green;
   }

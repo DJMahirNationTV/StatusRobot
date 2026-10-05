@@ -36,7 +36,7 @@ export function AccountPage({ user, loading, error, onLogout }: AccountPageProps
             <div><dt className="text-xs text-muted">Email</dt><dd className="mt-1 break-all font-medium">{user.email}</dd></div>
             <div><dt className="text-xs text-muted">Sign-in method</dt><dd className="mt-1 font-medium">{user.provider === 'local' ? 'Email and password' : user.provider === 'github' ? 'GitHub' : 'Discord'}</dd></div>
           </dl>
-          <a href="#status" className="button button-green w-full">View live status</a>
+          <a href="#dashboard" className="button button-green w-full">Manage monitors</a>
           <button type="button" onClick={logout} disabled={busy} className="button button-outline mt-3 w-full disabled:opacity-60">{busy ? 'Signing out...' : 'Sign out'}</button>
         </> : !loading && <a href="#login" className="button button-green mt-7 w-full">Sign in</a>}
       </section>
