@@ -36,7 +36,7 @@ public class MonitorService {
     }
 
     @Transactional
-    public MonitorResponse createMonitor(CreateMonitorRequest req) {
+    public MonitorResponse createMonitor(CreateMonitorRequest req, Long ownerId) {
         Monitor monitor = new Monitor(
             req.name(),
             req.url(),
@@ -44,14 +44,14 @@ public class MonitorService {
             req.intervalSeconds(),
             req.timeoutSeconds()
         );
-        monitor.setStatus(MonitorStatus.UP); // Start as UP until first scheduled ping
+        monitor.setOwnerId(ownerId);
+        monitor.setStatus(MonitorStatus.UP);
         return MonitorResponse.from(monitorRepository.save(monitor));
     }
 
     @Transactional
-    public MonitorResponse togglePause(Long id) {
-        Monitor monitor = monitorRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Monitor not found"));
+    public MonitorResponse togglePause(Long id, Long ownerId) {
+        Monitor monitor = ownedMonitor(id, ownerId);
 
         if (monitor.getStatus() == MonitorStatus.PAUSED) {
             monitor.setStatus(MonitorStatus.UP);
@@ -63,12 +63,16 @@ public class MonitorService {
     }
 
     @Transactional
-    public void deleteMonitor(Long id) {
-        if (!monitorRepository.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Monitor not found");
-        }
+    public void deleteMonitor(Long id, Long ownerId) {
+        ownedMonitor(id, ownerId);
         monitorRepository.deleteById(id);
         pingLogRepository.deleteByMonitorId(id); // deletes the logs from mongodb (using id)
+    }
+
+    private Monitor ownedMonitor(Long id, Long ownerId) {
+        return monitorRepository.findById(id)
+                .filter(monitor -> ownerId.equals(monitor.getOwnerId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Monitor not found"));
     }
 
 }

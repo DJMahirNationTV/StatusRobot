@@ -50,3 +50,6 @@ jobs:
 
       - name: Run ESLint (TypeScript)
         run: npm run lint
+
+      - name: Build Client (TypeScript and Vite)
+        run: npm run build

@@ -1,6 +1,6 @@
 import type {Monitor, MonitorStats, PingLog} from '../types/monitor';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+export const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export const api = {
   async getMonitors(): Promise<Monitor[]> {
