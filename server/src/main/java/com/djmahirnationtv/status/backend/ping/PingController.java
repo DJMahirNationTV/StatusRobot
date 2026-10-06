@@ -11,9 +11,23 @@ import java.util.List;
 public class PingController {
 
     private final PingService pingService;
+    private final PingHistoryService history;
 
-    public PingController(PingService pingService) {
+    public PingController(PingService pingService, PingHistoryService history) {
         this.pingService = pingService;
+        this.history = history;
+    }
+
+    @GetMapping("/history")
+    public PingHistoryService.MonitorHistoryResponse history(
+            @PathVariable Long monitorId, @RequestParam(defaultValue = "24") int hours) {
+        return history.history(monitorId, hours);
+    }
+
+    @ExceptionHandler(org.springframework.dao.DataAccessException.class)
+    @ResponseStatus(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE)
+    public java.util.Map<String, String> unavailable() {
+        return java.util.Map.of("message", "Monitoring history is temporarily unavailable. Please try again later.");
     }
 
     @GetMapping("/pings")

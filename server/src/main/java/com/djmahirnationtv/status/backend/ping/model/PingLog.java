@@ -7,6 +7,7 @@ import org.springframework.data.annotation.Id;
 import java.time.Instant;
 
 @Document(collection = "ping_logs")
+@org.springframework.data.mongodb.core.index.CompoundIndex(name = "monitor_history", def = "{'monitorId': 1, 'timestamp': 1}")
 public class PingLog {
     @Id
     private String id;
