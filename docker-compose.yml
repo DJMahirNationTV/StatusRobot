@@ -1,0 +1,16 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: statusrobot-mongo
+    restart: unless-stopped # starts automatically unless stopped manually
+    ports:
+      - "27017:27017" # Standard port for MongoDB
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin # Test User for Dev
+      MONGO_INITDB_ROOT_PASSWORD: admin # Test PW for Dev
+      MONGO_INITDB_DATABASE: ops_service_doc
+    volumes:
+      - mongo_data:/data/db # Data saved like a DB even if the container is removed
+
+volumes:
+  mongo_data:
