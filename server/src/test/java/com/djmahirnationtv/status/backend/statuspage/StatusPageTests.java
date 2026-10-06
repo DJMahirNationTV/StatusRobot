@@ -18,6 +18,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -28,7 +30,10 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:status-page-tests;MODE=MySQL;DB_CLOSE_DELAY=-1")
+@SpringBootTest(properties = {
+        "spring.datasource.url=jdbc:h2:mem:status-page-tests;MODE=MySQL;DB_CLOSE_DELAY=-1",
+        "spring.jpa.properties.hibernate.session_factory.statement_inspector=com.djmahirnationtv.status.backend.statuspage.StatusPageTests$LockSqlInspector"
+})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class StatusPageTests {
@@ -46,6 +51,7 @@ class StatusPageTests {
 
     @BeforeEach
     void prepare() {
+        LockSqlInspector.queries.clear();
         pages.deleteAll(); monitors.deleteAll(); users.deleteAll();
         ownerId = users.saveAndFlush(new AppUser("owner@example.test", null, "local", null)).getId();
         otherId = users.saveAndFlush(new AppUser("other@example.test", null, "local", null)).getId();
@@ -151,6 +157,15 @@ class StatusPageTests {
     }
 
     @Test
+    void ownerLockUsesPlainForUpdateWithoutAnAlias() {
+        service.save(null, settings("plain-lock", false), ownerId);
+        assertThat(LockSqlInspector.queries).singleElement().satisfies(sql ->
+                assertThat(sql.toLowerCase(Locale.ROOT))
+                        .contains("from app_users where id = ? for update")
+                        .doesNotContain("for update of"));
+    }
+
+    @Test
     void concurrentPinRequestsLeaveOnlyOneDefault() throws Exception {
         var first = service.save(null, settings("first-page", false), ownerId);
         var second = service.save(null, settings("second-page", false), ownerId);
@@ -170,5 +185,15 @@ class StatusPageTests {
     }
     private String input(String name, String slug, boolean pinned, Long monitorId) {
         return "{\"name\":\"" + name + "\",\"slug\":\"" + slug + "\",\"description\":\"\",\"monitorIds\":[" + monitorId + "],\"pinnedDefault\":" + pinned + "}";
+    }
+
+    public static class LockSqlInspector implements org.hibernate.resource.jdbc.spi.StatementInspector {
+        static final ConcurrentLinkedQueue<String> queries = new ConcurrentLinkedQueue<>();
+
+        @Override
+        public String inspect(String sql) {
+            if (sql.toLowerCase(Locale.ROOT).contains("for update")) queries.add(sql);
+            return sql;
+        }
     }
 }
