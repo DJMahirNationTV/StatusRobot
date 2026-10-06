@@ -11,16 +11,19 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import java.util.List;
+import com.djmahirnationtv.status.backend.integration.IntegrationService;
 
 @Service
 public class MonitorService {
 
     private final MonitorRepository monitorRepository;
     private final PingLogRepository pingLogRepository;
+    private final IntegrationService integrations;
 
-    public MonitorService(MonitorRepository monitorRepository, PingLogRepository pingLogRepository) {
+    public MonitorService(MonitorRepository monitorRepository, PingLogRepository pingLogRepository, IntegrationService integrations) {
         this.monitorRepository = monitorRepository;
         this.pingLogRepository = pingLogRepository;
+        this.integrations = integrations;
     }
 
     public List<MonitorResponse> getAllMonitors() {
@@ -45,6 +48,7 @@ public class MonitorService {
             req.timeoutSeconds()
         );
         monitor.setOwnerId(ownerId);
+        monitor.getIntegrations().addAll(integrations.selection(req.integrationIds(), ownerId));
         monitor.setStatus(MonitorStatus.UP);
         return MonitorResponse.from(monitorRepository.save(monitor));
     }
@@ -63,6 +67,11 @@ public class MonitorService {
         monitor.setHttpMethod(req.httpMethod());
         monitor.setIntervalSeconds(req.intervalSeconds());
         monitor.setTimeoutSeconds(req.timeoutSeconds());
+        if (req.integrationIds() != null) {
+            var selected = integrations.selection(req.integrationIds(), ownerId);
+            monitor.getIntegrations().clear();
+            monitor.getIntegrations().addAll(selected);
+        }
         if (targetChanged) monitor.setLastCheckedAt(null);
         return MonitorResponse.from(monitorRepository.save(monitor));
     }
@@ -86,6 +95,11 @@ public class MonitorService {
         ownedMonitor(id, ownerId);
         monitorRepository.deleteById(id);
         pingLogRepository.deleteByMonitorId(id); // deletes the logs from mongodb (using id)
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> getIntegrationIds(Long id, Long ownerId) {
+        return ownedMonitor(id, ownerId).getIntegrations().stream().map(item -> item.getId()).sorted().toList();
     }
 
     private Monitor ownedMonitor(Long id, Long ownerId) {

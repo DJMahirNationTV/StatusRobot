@@ -10,7 +10,7 @@ export interface Monitor {
   status: 'UP' | 'DOWN' | 'DEGRADED' | 'PAUSED';
 }
 
-export type MonitorInput = Pick<Monitor, 'name' | 'url' | 'httpMethod' | 'intervalSeconds' | 'timeoutSeconds'>;
+export type MonitorInput = Pick<Monitor, 'name' | 'url' | 'httpMethod' | 'intervalSeconds' | 'timeoutSeconds'> & { integrationIds: number[] };
 
 export interface MonitorStats {
   monitorId: number;

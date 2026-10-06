@@ -4,6 +4,9 @@ import jakarta.persistence.*;
 import lombok.Getter;
 
 import java.time.Instant;
+import java.util.Set;
+import java.util.HashSet;
+import com.djmahirnationtv.status.backend.integration.DiscordIntegration;
 
 @Getter
 @Entity
@@ -21,6 +24,11 @@ public class Monitor {
 
     @Column(name = "owner_id")
     private Long ownerId;
+
+    @ManyToMany
+    @JoinTable(name = "monitor_integrations", joinColumns = @JoinColumn(name = "monitor_id"),
+            inverseJoinColumns = @JoinColumn(name = "integration_id"))
+    private Set<DiscordIntegration> integrations = new HashSet<>();
 
     @Column(nullable = false)
     private String name;

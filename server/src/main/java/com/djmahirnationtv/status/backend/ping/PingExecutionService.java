@@ -15,6 +15,8 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Instant;
 import java.time.Duration;
+import org.springframework.context.ApplicationEventPublisher;
+import com.djmahirnationtv.status.backend.integration.MonitorStatusChanged;
 
 @Service
 public class PingExecutionService {
@@ -22,15 +24,18 @@ public class PingExecutionService {
     private final RestClient pingRestClient;
     private final PingLogRepository pingLogRepository;
     private final MonitorRepository monitorRepository;
+    private final ApplicationEventPublisher events;
 
-    public PingExecutionService(RestClient pingRestClient, PingLogRepository pingLogRepository, MonitorRepository monitorRepository) {
+    public PingExecutionService(RestClient pingRestClient, PingLogRepository pingLogRepository, MonitorRepository monitorRepository, ApplicationEventPublisher events) {
         this.pingRestClient = pingRestClient;
         this.pingLogRepository = pingLogRepository;
         this.monitorRepository = monitorRepository;
+        this.events = events;
     }
 
     @Transactional
     public void ping(Monitor monitor) {
+        MonitorStatus previousStatus = monitor.getStatus();
         long start = System.currentTimeMillis();
         int statusCode = 0;
         boolean success = false;
@@ -73,6 +78,10 @@ public class PingExecutionService {
         }
 
         monitorRepository.save(monitor);
+        boolean down = monitor.getStatus() == MonitorStatus.DOWN;
+        if (previousStatus != MonitorStatus.PAUSED && down != (previousStatus == MonitorStatus.DOWN)) {
+            events.publishEvent(new MonitorStatusChanged(monitor.getId(), monitor.getOwnerId(), monitor.getName(), down));
+        }
 
         log.info("Pinged [{}] {} -> status: {}, latency: {}ms",
                 monitor.getName(), monitor.getUrl(), statusCode, responseTime);

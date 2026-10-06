@@ -11,4 +11,5 @@ import java.util.List;
 public interface MonitorRepository extends JpaRepository<Monitor, Long> {
     List<Monitor> findByStatusNot(MonitorStatus status);
     List<Monitor> findByOwnerIdOrderByCreatedAtDesc(Long ownerId);
+    List<Monitor> findByIntegrationsId(Long integrationId);
 }

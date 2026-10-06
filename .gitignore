@@ -51,3 +51,6 @@ server/**/*.tar.gz
 # Java Absturz-Berichte (HotSpot VM)
 server/hs_err_pid*
 server/replay_pid*
+
+# Ignoriert IDE-spezifische Dateien
+unwanted-docs/

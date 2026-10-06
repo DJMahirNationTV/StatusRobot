@@ -45,6 +45,10 @@ function App() {
     window.scrollTo(0, 0)
   }, [hash])
 
+  if (route === '#dashboard' || route.startsWith('#dashboard/')) {
+    return <DashboardPage user={user} loading={loading} error={authError} route={route} />
+  }
+
   return (
     <div className="flex min-h-svh flex-col">
       <a
@@ -71,7 +75,6 @@ function App() {
         </div>
       </header>
       {route === '#status' ? <StatusPage />
-        : route === '#dashboard' ? <DashboardPage user={user} loading={loading} error={authError} />
         : route === '#login' || route === '#register' ? <AuthPage key={hash} mode={route === '#register' ? 'register' : 'login'} query={query} onLogin={signedIn} />
         : route === '#account' ? <AccountPage user={user} loading={loading} error={authError} onLogout={signedOut} />
         : <LandingPage repositoryUrl={repositoryUrl} />}
