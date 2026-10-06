@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { LandingPage } from './pages/LandingPage'
+import { HomePage } from './pages/HomePage'
 import { StatusPage } from './pages/StatusPage'
 import { AuthPage } from './pages/AuthPage'
 import { AccountPage } from './pages/AccountPage'
@@ -75,9 +75,10 @@ function App() {
         </div>
       </header>
       {route === '#status' ? <StatusPage />
+        : route.startsWith('#status/') ? <StatusPage key={route} slug={route.slice(8).replace(/\/$/, '')} />
         : route === '#login' || route === '#register' ? <AuthPage key={hash} mode={route === '#register' ? 'register' : 'login'} query={query} onLogin={signedIn} />
         : route === '#account' ? <AccountPage user={user} loading={loading} error={authError} onLogout={signedOut} />
-        : <LandingPage repositoryUrl={repositoryUrl} />}
+        : <HomePage repositoryUrl={repositoryUrl} />}
       <footer className="border-t border-line">
         <div className="page-shell flex flex-wrap items-center justify-between gap-3 py-6 text-xs text-muted">
           <p>Open source. MIT licensed.</p>

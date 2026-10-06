@@ -43,8 +43,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/auth/providers").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/monitors/mine").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/status-pages/mine").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/status-pages/default", "/api/status-pages/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/monitors", "/api/monitors/*",
-                                "/api/monitors/*/pings", "/api/monitors/*/stats").permitAll()
+                                "/api/monitors/*/pings", "/api/monitors/*/stats", "/api/monitors/*/history").permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form
                         .loginProcessingUrl("/api/auth/login")

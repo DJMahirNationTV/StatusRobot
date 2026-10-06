@@ -16,6 +16,7 @@ import type { AuthUser } from '../services/auth'
 import { MonitoringPage } from './MonitoringPage'
 import { MonitorEditorPage } from './MonitorEditorPage'
 import { IntegrationsPage } from './IntegrationsPage'
+import { StatusPagesDashboard } from './StatusPagesDashboard'
 
 interface DashboardPageProps {
   user: AuthUser | null
@@ -23,12 +24,14 @@ interface DashboardPageProps {
   error: string
   route: string
 }
-const upcoming = [
+const navigation = [
+  { icon: Activity, label: 'Monitoring', href: '#dashboard/monitoring/' },
   { icon: Network, label: '3rd party monitors' },
   { icon: ShieldAlert, label: 'Incidents' },
-  { icon: Radio, label: 'Status pages' },
+  { icon: Radio, label: 'Status pages', href: '#dashboard/status-pages/' },
   { icon: Wrench, label: 'Maintenance' },
-  { icon: Users, label: 'Team members' }
+  { icon: Users, label: 'Team members' },
+  { icon: Cable, label: 'Integrations & API', href: '#dashboard/integrations/' }
 ]
 
 export function DashboardPage({
@@ -60,6 +63,7 @@ export function DashboardPage({
 
   const path = route.replace(/\/$/, '')
   const integrations = path === '#dashboard/integrations'
+  const statusPages = path === '#dashboard/status-pages'
   const newMonitor = [
     '#dashboard/monitoring/new',
     '#dashboard/monitoring/create'
@@ -117,35 +121,39 @@ export function DashboardPage({
           className="space-y-1"
           onClick={() => setMenuOpen(false)}
         >
-          <a
-            href="#dashboard/monitoring/"
-            aria-current={!integrations ? 'page' : undefined}
-            className={`sidebar-link ${!integrations ? 'bg-sage text-green' : 'hover:bg-sage'}`}
-          >
-            <Activity size={18} />
-            Monitoring
-          </a>
-          {upcoming.map(({ icon: Icon, label }) => (
-            <button
-              key={label}
-              type="button"
-              disabled
-              title="Coming later"
-              className="sidebar-link w-full cursor-not-allowed text-muted/60"
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-              <span className="sr-only"> (coming later)</span>
-            </button>
-          ))}
-          <a
-            href="#dashboard/integrations/"
-            aria-current={integrations ? 'page' : undefined}
-            className={`sidebar-link ${integrations ? 'bg-sage text-green' : 'hover:bg-sage'}`}
-          >
-            <Cable size={18} />
-            Integrations & API
-          </a>
+          {navigation.map(({ icon: Icon, label, href }) =>
+            href ? (
+              <a
+                key={label}
+                href={href}
+                aria-current={
+                  (
+                    href === '#dashboard/monitoring/'
+                      ? !integrations && !statusPages
+                      : href.replace(/\/$/, '') === path
+                  )
+                    ? 'page'
+                    : undefined
+                }
+                className={`sidebar-link ${(href === '#dashboard/monitoring/' ? !integrations && !statusPages : href.replace(/\/$/, '') === path) ? 'bg-sage text-green' : 'hover:bg-sage'}`}
+              >
+                <Icon size={18} />
+                {label}
+              </a>
+            ) : (
+              <button
+                key={label}
+                type="button"
+                disabled
+                title="Coming later"
+                className="sidebar-link w-full cursor-not-allowed text-muted/60"
+              >
+                <Icon size={18} />
+                <span>{label}</span>
+                <span className="sr-only"> (coming later)</span>
+              </button>
+            )
+          )}
         </nav>
         <div className="mt-8 border-t border-line pt-5 lg:mt-auto">
           <a
@@ -182,6 +190,8 @@ export function DashboardPage({
         <div className="mx-auto max-w-[1440px]">
           {integrations ? (
             <IntegrationsPage key={user.id} />
+          ) : statusPages ? (
+            <StatusPagesDashboard key={user.id} />
           ) : newMonitor || edit ? (
             <MonitorEditorPage
               key={`${user.id}-${path}`}
