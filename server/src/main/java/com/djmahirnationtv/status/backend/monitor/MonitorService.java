@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import java.util.List;
 import com.djmahirnationtv.status.backend.integration.IntegrationService;
+import com.djmahirnationtv.status.backend.statuspage.StatusPageRepository;
 
 @Service
 public class MonitorService {
@@ -19,11 +20,14 @@ public class MonitorService {
     private final MonitorRepository monitorRepository;
     private final PingLogRepository pingLogRepository;
     private final IntegrationService integrations;
+    private final StatusPageRepository statusPages;
 
-    public MonitorService(MonitorRepository monitorRepository, PingLogRepository pingLogRepository, IntegrationService integrations) {
+    public MonitorService(MonitorRepository monitorRepository, PingLogRepository pingLogRepository, IntegrationService integrations,
+                          StatusPageRepository statusPages) {
         this.monitorRepository = monitorRepository;
         this.pingLogRepository = pingLogRepository;
         this.integrations = integrations;
+        this.statusPages = statusPages;
     }
 
     public List<MonitorResponse> getAllMonitors() {
@@ -93,6 +97,10 @@ public class MonitorService {
     @Transactional
     public void deleteMonitor(Long id, Long ownerId) {
         ownedMonitor(id, ownerId);
+        for (var page : statusPages.findByMonitorsId(id)) {
+            page.getMonitors().removeIf(monitor -> monitor.getId().equals(id));
+        }
+        statusPages.flush();
         monitorRepository.deleteById(id);
         pingLogRepository.deleteByMonitorId(id); // deletes the logs from mongodb (using id)
     }
