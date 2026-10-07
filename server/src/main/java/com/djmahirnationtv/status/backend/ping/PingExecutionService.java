@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.Duration;
 import org.springframework.context.ApplicationEventPublisher;
 import com.djmahirnationtv.status.backend.integration.MonitorStatusChanged;
+import com.djmahirnationtv.status.backend.incident.IncidentService;
 
 @Service
 public class PingExecutionService {
@@ -25,12 +26,15 @@ public class PingExecutionService {
     private final PingLogRepository pingLogRepository;
     private final MonitorRepository monitorRepository;
     private final ApplicationEventPublisher events;
+    private final IncidentService incidents;
 
-    public PingExecutionService(RestClient pingRestClient, PingLogRepository pingLogRepository, MonitorRepository monitorRepository, ApplicationEventPublisher events) {
+    public PingExecutionService(RestClient pingRestClient, PingLogRepository pingLogRepository, MonitorRepository monitorRepository,
+                                ApplicationEventPublisher events, IncidentService incidents) {
         this.pingRestClient = pingRestClient;
         this.pingLogRepository = pingLogRepository;
         this.monitorRepository = monitorRepository;
         this.events = events;
+        this.incidents = incidents;
     }
 
     @Transactional
@@ -77,7 +81,8 @@ public class PingExecutionService {
             monitor.setStatus(MonitorStatus.UP);
         }
 
-        monitorRepository.save(monitor);
+        monitorRepository.saveAndFlush(monitor);
+        incidents.recordCheck(monitor, statusCode);
         boolean down = monitor.getStatus() == MonitorStatus.DOWN;
         if (previousStatus != MonitorStatus.PAUSED && down != (previousStatus == MonitorStatus.DOWN)) {
             events.publishEvent(new MonitorStatusChanged(monitor.getId(), monitor.getOwnerId(), monitor.getName(), down));

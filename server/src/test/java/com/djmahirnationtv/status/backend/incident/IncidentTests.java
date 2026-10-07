@@ -4,6 +4,12 @@ import com.djmahirnationtv.status.backend.ping.PingScheduler;
 import com.djmahirnationtv.status.backend.ping.repository.PingLogRepository;
 import com.djmahirnationtv.status.backend.monitor.model.Monitor;
 import com.djmahirnationtv.status.backend.monitor.model.MonitorStatus;
+import com.djmahirnationtv.status.backend.monitor.repository.MonitorRepository;
+import com.djmahirnationtv.status.backend.ping.PingExecutionService;
+import com.sun.net.httpserver.HttpServer;
+import java.net.InetSocketAddress;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,12 +33,15 @@ class IncidentTests {
     @Autowired IncidentRepository incidents;
     @Autowired IncidentService service;
     @Autowired MockMvc mvc;
+    @Autowired MonitorRepository monitors;
+    @Autowired PingExecutionService execution;
     @MockitoBean PingScheduler scheduler;
     @MockitoBean PingLogRepository pings;
 
     @BeforeEach
     void prepare() {
         incidents.deleteAll();
+        monitors.deleteAll();
     }
 
     @Test
@@ -144,6 +153,44 @@ class IncidentTests {
         monitor.setStatus(MonitorStatus.DOWN);
         service.recordCheck(monitor, 503);
         assertThat(incidents.count()).isEqualTo(1);
+    }
+
+    @Test
+    void realChecksPersistIncidentsAndRejectStaleRecovery() throws Exception {
+        var httpStatus = new AtomicInteger(503);
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/health", exchange -> {
+            exchange.sendResponseHeaders(httpStatus.get(), -1);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var monitor = new Monitor("Website", "http://127.0.0.1:" + server.getAddress().getPort() + "/health", "GET", 60, 5);
+            monitor.setOwnerId(1L);
+            monitor.setStatus(MonitorStatus.UP);
+            Long id = monitors.saveAndFlush(monitor).getId();
+            var stale = monitors.findById(id).orElseThrow();
+
+            execution.ping(monitors.findById(id).orElseThrow());
+            execution.ping(monitors.findById(id).orElseThrow());
+            assertThat(incidents.count()).isEqualTo(1);
+            assertThat(incidents.findByOpenMonitorId(id)).isPresent();
+
+            httpStatus.set(200);
+            assertThatThrownBy(() -> execution.ping(stale))
+                    .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+            assertThat(incidents.findByOpenMonitorId(id)).isPresent();
+            assertThat(monitors.findById(id).orElseThrow().getStatus()).isEqualTo(MonitorStatus.DOWN);
+
+            execution.ping(monitors.findById(id).orElseThrow());
+            assertThat(incidents.findByOpenMonitorId(id)).isEmpty();
+            assertThat(service.mine(1L, "resolved", 0).incidents()).hasSize(1);
+            httpStatus.set(503);
+            execution.ping(monitors.findById(id).orElseThrow());
+            assertThat(incidents.count()).isEqualTo(2);
+        } finally {
+            server.stop(0);
+        }
     }
 
     private Monitor checkedMonitor() {

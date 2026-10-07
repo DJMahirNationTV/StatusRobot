@@ -29,7 +29,8 @@ class PingExecutionServiceTests {
         server.start();
         try {
             var events = mock(org.springframework.context.ApplicationEventPublisher.class);
-            var service = new PingExecutionService(RestClient.create(), mock(PingLogRepository.class), mock(MonitorRepository.class), events);
+            var service = new PingExecutionService(RestClient.create(), mock(PingLogRepository.class), mock(MonitorRepository.class),
+                    events, mock(com.djmahirnationtv.status.backend.incident.IncidentService.class));
             var monitor = new Monitor("Website", "http://127.0.0.1:" + server.getAddress().getPort() + "/health", "GET", 60, 5);
             monitor.setId(1L);
             monitor.setOwnerId(2L);
@@ -62,7 +63,8 @@ class PingExecutionServiceTests {
         try {
             var monitors = mock(MonitorRepository.class);
             var pings = mock(PingLogRepository.class);
-            var service = new PingExecutionService(RestClient.create(), pings, monitors, mock(org.springframework.context.ApplicationEventPublisher.class));
+            var service = new PingExecutionService(RestClient.create(), pings, monitors, mock(org.springframework.context.ApplicationEventPublisher.class),
+                    mock(com.djmahirnationtv.status.backend.incident.IncidentService.class));
             var monitor = new Monitor("Slow website", "http://127.0.0.1:" + server.getAddress().getPort() + "/slow", "GET", 60, 1);
             monitor.setId(1L);
 
