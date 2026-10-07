@@ -9,7 +9,9 @@ StatusRobot is an open-source, self-hosted uptime monitoring application for web
 - Create multiple public status pages and choose which monitors appear on each page.
 - Pin one status page as the default homepage, replacing the landing page.
 - Receive Discord webhook notifications when a monitor changes status.
-- Track outages and recoveries in the private Incidents tab.
+- Track outages, create manual incidents and post progress updates.
+- Publish selected incidents on the status pages that include the affected monitor.
+- Optionally ask OpenAI for incident explanations and possible checks to try.
 - Sign in with email and password, GitHub or Discord.
 
 The frontend uses React, TypeScript and Tailwind CSS. The backend uses Java and Spring Boot, with MySQL for accounts and configuration and MongoDB for monitoring history.
@@ -127,16 +129,44 @@ Open an incident to see the first failure, detection time, recovery time and dur
 
 Pausing a monitor does not close its incident. Recovery is confirmed by a successful check after monitoring resumes. Deleting a monitor removes its check history and incidents too.
 
-Incidents are stored in the MySQL `incidents` table. Hibernate creates it on startup with the existing `spring.jpa.hibernate.ddl-auto=update` setting. No new environment variables are required. The database account needs permission to create the table and its indexes.
+Use **New incident** to report a problem manually. Choose a monitor, title and first update. Manual incidents start as investigating and stay open until you add a resolved update, even if HTTP checks succeed. Progress can be investigating, identified, monitoring or resolved. Resolved incidents cannot be reopened. Create a new incident for a new problem.
 
-The monitoring check saves the monitor state and incident in one database transaction. A unique open-monitor ID prevents two open incidents for the same monitor. Incident responses contain a short failure description, not raw exception messages or webhook details.
+All incidents start private. To share one, add an update, review the public title and check **Publish this incident** in its details. Its title, progress, timestamps and all written updates appear on every status page in your account that includes the affected monitor. Uncheck this setting to hide it again. Do not put secrets or internal details in updates. The automatic failure reason is not included in public incident responses.
+
+Public pages refresh every 30 seconds and show up to 40 published incidents, with open incidents first. Private history still lists 20 incidents per page. Each incident allows up to 100 written updates, with 3000 characters per update.
+
+Incidents are stored in the MySQL `incidents` and `incident_updates` tables. Hibernate creates or updates them on startup with the existing `spring.jpa.hibernate.ddl-auto=update` setting. Existing incidents remain private and keep their recorded timestamps. Back up the database before upgrading. The database account needs permission to create and alter tables and indexes.
+
+The monitoring check saves the monitor state and automatic incident in one database transaction. A unique open-monitor ID prevents two open automatic incidents for the same monitor. Manual incidents do not use this ID, so they are independent of automatic checks. Incident responses contain a short failure description, not raw exception messages or webhook details.
 
 The API requires a signed-in session:
 
 - `GET /api/incidents?status=all&page=0` lists your incidents. Status can be `all`, `open` or `resolved`, and page numbers start at zero.
 - `GET /api/incidents/{id}` returns one of your incidents. Another user's incident returns 404.
+- `POST /api/incidents` creates a private manual incident with `monitorId`, `title` and `message`.
+- `POST /api/incidents/{id}/updates` adds a `stage` and `message`. Stage values are `INVESTIGATING`, `IDENTIFIED`, `MONITORING` and `RESOLVED`. Automatic incidents need a successful HTTP check before they can be resolved.
+- `PATCH /api/incidents/{id}` saves the public `title` and `published` flag. At least one written update is required before publishing.
 
-History starts with checks after this feature is installed. Existing MongoDB logs are not converted into incidents. Manual updates, public status-page incidents and OpenAI explanations are not included yet.
+Write requests also require the session's CSRF token. Published incidents are included in the public status-page responses, but the private incident API still requires a signed-in owner.
+
+History starts with checks after this feature is installed. Existing MongoDB logs are not converted into incidents.
+
+### Optional OpenAI incident help
+
+Set `OPENAI_API_KEY` on the backend to enable **Incident help**. Keep the key in your server's secret settings, not in Git, frontend code or a `VITE_` variable. `OPENAI_MODEL` defaults to `gpt-4.1-mini` and can be changed to a model supported by the Responses API. API billing is separate from a ChatGPT subscription.
+
+Open an incident, optionally add context, confirm consent and click **Ask OpenAI**. The backend sends the check result, progress and start and recovery times, plus only the context you enter for this request. Monitor names, URLs and saved update messages are not sent. This also means you need to enter context for a useful explanation of a manual incident. Do not include secrets or personal details.
+
+The request uses the [OpenAI Responses API](https://developers.openai.com/api/docs/guides/text) with `store: false`, no tools and a maximum of 800 output tokens. This setting disables response storage for later API retrieval. It does not promise zero retention under every OpenAI data policy.
+
+Suggestions are shown privately and are not saved automatically. **Use as update draft** copies the text into the message field. Review it before saving or publishing. Suggestions can be wrong and cannot confirm a root cause or make changes to your services.
+
+The backend allows 5 analysis requests per account and 100 total requests per hour, with at most 3 running at once. Failed attempts count too. These limits apply per backend instance and reset when it restarts. Set spending limits and monitor usage in your OpenAI project before enabling this on a public server. Requests have a 5-second connection timeout and a 20-second response timeout. There are no automatic retries or paid calls from scheduled monitor checks.
+
+- `GET /api/incidents/analysis-settings` reports whether OpenAI support is configured, without returning the key.
+- `POST /api/incidents/{id}/analysis` requires ownership, CSRF and `consent: true`. Optional `context` allows up to 2000 characters. It returns private `text` and `model`, without publishing an update.
+
+Without a key, monitoring and all incident features still work. The automated tests use mock OpenAI responses and do not need a key or incur API costs.
 
 ## Optional OAuth sign-in
 
