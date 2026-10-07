@@ -17,6 +17,7 @@ import { MonitorEditorPage } from './MonitorEditorPage'
 import { IntegrationsPage } from './IntegrationsPage'
 import { StatusPagesDashboard } from './StatusPagesDashboard'
 import { IncidentsPage, IncidentDetailsPage } from './IncidentsPage'
+import { IncidentEditorPage } from './IncidentEditorPage'
 
 interface DashboardPageProps {
   user: AuthUser | null
@@ -64,7 +65,8 @@ export function DashboardPage({
   const integrations = path === '#dashboard/integrations'
   const statusPages = path === '#dashboard/status-pages'
   const incidentDetail = path.match(/^#dashboard\/incidents\/(\d+)$/)
-  const incidents = path === '#dashboard/incidents' || Boolean(incidentDetail)
+  const newIncident = ['#dashboard/incidents/new', '#dashboard/incidents/create'].includes(path)
+  const incidents = path === '#dashboard/incidents' || Boolean(incidentDetail) || newIncident
   const newMonitor = [
     '#dashboard/monitoring/new',
     '#dashboard/monitoring/create'
@@ -190,7 +192,8 @@ export function DashboardPage({
           ) : statusPages ? (
             <StatusPagesDashboard key={user.id} />
           ) : incidents ? (
-            incidentDetail ? <IncidentDetailsPage key={`${user.id}-${path}`} incidentId={Number(incidentDetail[1])} />
+            newIncident ? <IncidentEditorPage key={user.id} />
+              : incidentDetail ? <IncidentDetailsPage key={`${user.id}-${path}`} incidentId={Number(incidentDetail[1])} />
               : <IncidentsPage key={user.id} />
           ) : newMonitor || edit ? (
             <MonitorEditorPage
