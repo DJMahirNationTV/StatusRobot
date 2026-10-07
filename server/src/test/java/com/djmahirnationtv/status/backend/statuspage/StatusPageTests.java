@@ -8,6 +8,9 @@ import com.djmahirnationtv.status.backend.monitor.model.Monitor;
 import com.djmahirnationtv.status.backend.monitor.repository.MonitorRepository;
 import com.djmahirnationtv.status.backend.ping.PingScheduler;
 import com.djmahirnationtv.status.backend.ping.repository.PingLogRepository;
+import com.djmahirnationtv.status.backend.incident.IncidentService;
+import com.djmahirnationtv.status.backend.incident.IncidentRepository;
+import com.djmahirnationtv.status.backend.incident.Incident;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +46,8 @@ class StatusPageTests {
     @Autowired MonitorRepository monitors;
     @Autowired MonitorService monitorService;
     @Autowired UserRepository users;
+    @Autowired IncidentService incidents;
+    @Autowired IncidentRepository incidentRepository;
     @MockitoBean PingScheduler scheduler;
     @MockitoBean PingLogRepository pings;
     private Long ownerId;
@@ -52,12 +57,40 @@ class StatusPageTests {
     @BeforeEach
     void prepare() {
         LockSqlInspector.queries.clear();
-        pages.deleteAll(); monitors.deleteAll(); users.deleteAll();
+        pages.deleteAll(); incidentRepository.deleteAll(); monitors.deleteAll(); users.deleteAll();
         ownerId = users.saveAndFlush(new AppUser("owner@example.test", null, "local", null)).getId();
         otherId = users.saveAndFlush(new AppUser("other@example.test", null, "local", null)).getId();
         monitor = new Monitor("Website", "https://example.com", "GET", 60, 5);
         monitor.setOwnerId(ownerId);
         monitor = monitors.saveAndFlush(monitor);
+    }
+
+    @Test
+    void publicIncidentsRequirePublicationAndMatchThePageOwnerAndSelectedMonitors() throws Exception {
+        var page = service.save(null, settings("public-incidents", true), ownerId);
+        var incident = incidents.create(new IncidentService.CreateRequest(monitor.getId(), "Delayed requests", "We are investigating."), ownerId);
+        mvc.perform(get("/api/status-pages/public-incidents")).andExpect(jsonPath("$.incidents").isEmpty());
+        incidents.publish(incident.id(), new IncidentService.PublicationRequest("Delayed requests", true), ownerId);
+        incidents.update(incident.id(), new IncidentService.UpdateRequest(Incident.Stage.MONITORING, "A fix is being checked."), ownerId);
+        var privateIncident = incidents.create(new IncidentService.CreateRequest(monitor.getId(), "Private incident", "Internal note"), ownerId);
+        var foreign = Incident.manual(otherId, monitor.getId(), "Website", "Other user's incident", "Other user's message");
+        foreign.publish("Other user's incident", true);
+        incidentRepository.saveAndFlush(foreign);
+        mvc.perform(get("/api/status-pages/public-incidents")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.incidents.length()").value(1))
+                .andExpect(jsonPath("$.incidents[0].title").value("Delayed requests"))
+                .andExpect(jsonPath("$.incidents[0].updates.length()").value(2))
+                .andExpect(jsonPath("$.incidents[0].cause").doesNotExist())
+                .andExpect(jsonPath("$.incidents[0].ownerId").doesNotExist());
+        mvc.perform(get("/api/status-pages/default")).andExpect(jsonPath("$.incidents[0].id").value(incident.id()));
+        assertThat(incidents.get(privateIncident.id(), ownerId).published()).isFalse();
+        service.save(null, new StatusPageRequest("Empty", "empty-selection", "", List.of(), false), ownerId);
+        mvc.perform(get("/api/status-pages/empty-selection")).andExpect(jsonPath("$.incidents").isEmpty());
+        incidents.publish(incident.id(), new IncidentService.PublicationRequest("Delayed requests", false), ownerId);
+        mvc.perform(get("/api/status-pages/public-incidents")).andExpect(jsonPath("$.incidents").isEmpty());
+        incidents.publish(incident.id(), new IncidentService.PublicationRequest("Delayed requests", true), ownerId);
+        service.save(page.id(), new StatusPageRequest("Status", "public-incidents", "", List.of(), true), ownerId);
+        mvc.perform(get("/api/status-pages/public-incidents")).andExpect(jsonPath("$.incidents").isEmpty());
     }
 
     @Test

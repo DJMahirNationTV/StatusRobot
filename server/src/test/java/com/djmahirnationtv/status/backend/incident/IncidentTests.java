@@ -21,12 +21,15 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.time.Instant;
+import org.springframework.http.MediaType;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:incident-tests;MODE=MySQL;DB_CLOSE_DELAY=-1")
@@ -46,6 +49,66 @@ class IncidentTests {
     void prepare() {
         incidents.deleteAll();
         monitors.deleteAll();
+    }
+
+    @Test
+    void manualIncidentsKeepTheirOwnTimelineAndDoNotCloseOnAHealthyCheck() {
+        var monitor = new Monitor("Website", "https://example.com", "GET", 60, 5);
+        monitor.setOwnerId(1L);
+        monitor = monitors.saveAndFlush(monitor);
+        var incident = service.create(new IncidentService.CreateRequest(monitor.getId(), "Delayed orders", "We are investigating."), 1L);
+        assertThat(incident.manual()).isTrue();
+        assertThat(incident.published()).isFalse();
+        assertThat(incident.updates()).hasSize(1);
+        monitor.setLastCheckedAt(Instant.now());
+        monitor.setStatus(MonitorStatus.UP);
+        service.recordCheck(monitor, 200);
+        assertThat(service.get(incident.id(), 1L).resolvedAt()).isNull();
+        service.update(incident.id(), new IncidentService.UpdateRequest(Incident.Stage.IDENTIFIED, "The queue is delayed."), 1L);
+        var resolved = service.update(incident.id(), new IncidentService.UpdateRequest(Incident.Stage.RESOLVED, "Orders are processing again."), 1L);
+        assertThat(resolved.stage()).isEqualTo(Incident.Stage.RESOLVED);
+        assertThat(resolved.resolvedAt()).isNotNull();
+        assertThat(resolved.updates()).hasSize(3);
+        assertThatThrownBy(() -> service.update(incident.id(), new IncidentService.UpdateRequest(Incident.Stage.INVESTIGATING, "Reopen"), 1L))
+                .hasMessageContaining("400");
+        monitorService.deleteMonitor(monitor.getId(), 1L);
+        assertThat(incidents.existsById(incident.id())).isFalse();
+    }
+
+    @Test
+    void mutationsRequireLoginCsrfOwnershipAndValidInput() throws Exception {
+        var monitor = new Monitor("Website", "https://example.com", "GET", 60, 5);
+        monitor.setOwnerId(1L);
+        monitor = monitors.saveAndFlush(monitor);
+        String body = "{\"monitorId\":" + monitor.getId() + ",\"title\":\"Delayed orders\",\"message\":\"Investigating\"}";
+        mvc.perform(post("/api/incidents").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/incidents").with(user("1")).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/incidents").with(user("2")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isNotFound());
+        mvc.perform(post("/api/incidents").with(user("1")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"title\":\" \"}")).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/incidents").with(user("1")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.stage").value("INVESTIGATING"));
+        var id = service.mine(1L, "all", 0).incidents().getFirst().id();
+        String update = "{\"stage\":\"IDENTIFIED\",\"message\":\"Found the problem.\"}";
+        mvc.perform(post("/api/incidents/" + id + "/updates").with(user("1")).contentType(MediaType.APPLICATION_JSON).content(update)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/incidents/" + id + "/updates").with(user("2")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(update)).andExpect(status().isNotFound());
+        mvc.perform(post("/api/incidents/" + id + "/updates").with(user("1")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(update)).andExpect(status().isOk());
+        String publication = "{\"title\":\"Delayed orders\",\"published\":true}";
+        mvc.perform(patch("/api/incidents/" + id).with(user("1")).contentType(MediaType.APPLICATION_JSON).content(publication)).andExpect(status().isForbidden());
+        mvc.perform(patch("/api/incidents/" + id).with(user("2")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(publication)).andExpect(status().isNotFound());
+        mvc.perform(patch("/api/incidents/" + id).with(user("1")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(publication))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.published").value(true));
+        assertThat(incidents.count()).isEqualTo(1);
+    }
+
+    @Test
+    void automaticIncidentsRequireARealRecoveryAndAnUpdateBeforePublishing() {
+        var incident = incidents.saveAndFlush(new Incident(1L, 10L, "Website", "HTTP 503", Instant.now()));
+        assertThatThrownBy(() -> service.update(incident.getId(), new IncidentService.UpdateRequest(Incident.Stage.RESOLVED, "Fixed"), 1L))
+                .hasMessageContaining("successful check");
+        assertThatThrownBy(() -> service.publish(incident.getId(), new IncidentService.PublicationRequest("Website outage", true), 1L))
+                .hasMessageContaining("Add a public update");
+        service.update(incident.getId(), new IncidentService.UpdateRequest(Incident.Stage.MONITORING, "Watching the recovery."), 1L);
+        assertThat(service.publish(incident.getId(), new IncidentService.PublicationRequest("Website outage", true), 1L).published()).isTrue();
     }
 
     @Test
