@@ -24,6 +24,7 @@ import java.time.Instant;
 import org.springframework.http.MediaType;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -44,6 +45,7 @@ class IncidentTests {
     @Autowired PingExecutionService execution;
     @MockitoBean PingScheduler scheduler;
     @MockitoBean PingLogRepository pings;
+    @MockitoBean IncidentAnalysisService analysis;
 
     @BeforeEach
     void prepare() {
@@ -109,6 +111,29 @@ class IncidentTests {
                 .hasMessageContaining("Add a public update");
         service.update(incident.getId(), new IncidentService.UpdateRequest(Incident.Stage.MONITORING, "Watching the recovery."), 1L);
         assertThat(service.publish(incident.getId(), new IncidentService.PublicationRequest("Website outage", true), 1L).published()).isTrue();
+    }
+
+    @Test
+    void analysisRequiresLoginCsrfOwnershipConsentAndBoundedContext() throws Exception {
+        var incident = incidents.saveAndFlush(new Incident(1L, 10L, "Website", "HTTP 503", Instant.now()));
+        String path = "/api/incidents/" + incident.getId() + "/analysis";
+        String body = "{\"consent\":true,\"context\":\"Check the deployment.\"}";
+        mvc.perform(get("/api/incidents/analysis-settings")).andExpect(status().isUnauthorized());
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isUnauthorized());
+        mvc.perform(post(path).with(user("1")).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(post(path).with(user("2")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isNotFound());
+        mvc.perform(post(path).with(user("1")).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"consent\":true,\"context\":\"" + "x".repeat(2001) + "\"}")).andExpect(status().isBadRequest());
+        verifyNoInteractions(analysis);
+        when(analysis.analyze(any(), eq(1L), eq(false), any())).thenThrow(new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "Confirm consent."));
+        mvc.perform(post(path).with(user("1")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"consent\":false}"))
+                .andExpect(status().isBadRequest());
+        when(analysis.analyze(any(), eq(1L), eq(true), any())).thenReturn(new IncidentAnalysisService.Analysis("Check the service logs.", "test-model"));
+        mvc.perform(post(path).with(user("1")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.text").value("Check the service logs."));
+        assertThat(service.get(incident.getId(), 1L).updates()).isEmpty();
+        assertThat(service.get(incident.getId(), 1L).published()).isFalse();
     }
 
     @Test

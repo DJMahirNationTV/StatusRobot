@@ -8,15 +8,18 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/incidents")
 public class IncidentController {
     private final IncidentService incidents;
+    private final IncidentAnalysisService analysis;
 
-    public IncidentController(IncidentService incidents) {
+    public IncidentController(IncidentService incidents, IncidentAnalysisService analysis) {
         this.incidents = incidents;
+        this.analysis = analysis;
     }
 
     @GetMapping
@@ -28,6 +31,20 @@ public class IncidentController {
     @GetMapping("/{id}")
     public IncidentService.IncidentResponse get(@PathVariable Long id, Authentication auth) {
         return incidents.get(id, Long.valueOf(auth.getName()));
+    }
+
+    @GetMapping("/analysis-settings")
+    public Map<String, Boolean> analysisSettings() {
+        return Map.of("enabled", analysis.enabled());
+    }
+
+    public record AnalysisRequest(boolean consent, @Size(max = 2000) String context) {}
+
+    @PostMapping("/{id}/analysis")
+    public IncidentAnalysisService.Analysis analyze(@PathVariable Long id, @Valid @RequestBody AnalysisRequest input,
+                                                    Authentication auth) {
+        Long ownerId = Long.valueOf(auth.getName());
+        return analysis.analyze(incidents.get(id, ownerId), ownerId, input.consent(), input.context());
     }
 
     @PostMapping
