@@ -7,6 +7,7 @@ import java.util.Optional;
 
 public interface IncidentRepository extends JpaRepository<Incident, Long> {
     Optional<Incident> findByOpenMonitorId(Long monitorId);
+    Optional<Incident> findByIdAndOwnerId(Long id, Long ownerId);
     Page<Incident> findByOwnerId(Long ownerId, Pageable pageable);
     Page<Incident> findByOwnerIdAndResolvedAtIsNull(Long ownerId, Pageable pageable);
     Page<Incident> findByOwnerIdAndResolvedAtIsNotNull(Long ownerId, Pageable pageable);

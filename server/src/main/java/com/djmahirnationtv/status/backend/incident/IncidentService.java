@@ -28,6 +28,12 @@ public class IncidentService {
     public record Listing(List<IncidentResponse> incidents, int page, int totalPages, long totalElements) {}
 
     @Transactional(readOnly = true)
+    public IncidentResponse get(Long id, Long ownerId) {
+        return incidents.findByIdAndOwnerId(id, ownerId).map(IncidentResponse::from)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found."));
+    }
+
+    @Transactional(readOnly = true)
     public Listing mine(Long ownerId, String status, int page) {
         if (page < 0 || page > 100_000) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a valid page number.");

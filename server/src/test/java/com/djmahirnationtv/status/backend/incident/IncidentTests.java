@@ -6,18 +6,25 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:incident-tests;MODE=MySQL;DB_CLOSE_DELAY=-1")
 @ActiveProfiles("test")
+@AutoConfigureMockMvc
 class IncidentTests {
     @Autowired IncidentRepository incidents;
     @Autowired IncidentService service;
+    @Autowired MockMvc mvc;
     @MockitoBean PingScheduler scheduler;
     @MockitoBean PingLogRepository pings;
 
@@ -73,5 +80,27 @@ class IncidentTests {
         assertThat(service.mine(3L, "all", 0).incidents()).isEmpty();
         assertThatThrownBy(() -> service.mine(1L, "unknown", 0)).hasMessageContaining("400");
         assertThatThrownBy(() -> service.mine(1L, "all", -1)).hasMessageContaining("400");
+    }
+
+    @Test
+    void apiRequiresLoginAndNeverShowsAnotherUsersIncident() throws Exception {
+        var owned = incidents.saveAndFlush(new Incident(1L, 10L, "Website", "HTTP 503", Instant.now()));
+        String path = "/api/incidents/" + owned.getId();
+        mvc.perform(get("/api/incidents")).andExpect(status().isUnauthorized());
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/incidents").with(user("2")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.incidents").isEmpty());
+        mvc.perform(get(path).with(user("2"))).andExpect(status().isNotFound());
+        mvc.perform(get("/api/incidents/999999").with(user("1"))).andExpect(status().isNotFound());
+        mvc.perform(get(path).with(user("1"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.monitorName").value("Website"))
+                .andExpect(jsonPath("$.ownerId").doesNotExist())
+                .andExpect(jsonPath("$.openMonitorId").doesNotExist());
+        mvc.perform(get("/api/incidents").with(user("1")).param("status", "unknown"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").isNotEmpty());
+        mvc.perform(get("/api/incidents").with(user("1")).param("page", "-1"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/incidents").with(user("1")).param("page", "abc"))
+                .andExpect(status().isBadRequest());
     }
 }
