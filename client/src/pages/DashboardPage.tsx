@@ -16,7 +16,7 @@ import { MonitoringPage } from './MonitoringPage'
 import { MonitorEditorPage } from './MonitorEditorPage'
 import { IntegrationsPage } from './IntegrationsPage'
 import { StatusPagesDashboard } from './StatusPagesDashboard'
-import { IncidentsPage } from './IncidentsPage'
+import { IncidentsPage, IncidentDetailsPage } from './IncidentsPage'
 
 interface DashboardPageProps {
   user: AuthUser | null
@@ -63,13 +63,18 @@ export function DashboardPage({
   const path = route.replace(/\/$/, '')
   const integrations = path === '#dashboard/integrations'
   const statusPages = path === '#dashboard/status-pages'
-  const incidents = path === '#dashboard/incidents'
+  const incidentDetail = path.match(/^#dashboard\/incidents\/(\d+)$/)
+  const incidents = path === '#dashboard/incidents' || Boolean(incidentDetail)
   const newMonitor = [
     '#dashboard/monitoring/new',
     '#dashboard/monitoring/create'
   ].includes(path)
   const edit = path.match(/^#dashboard\/monitoring\/(\d+)\/edit$/)
   const listing = ['#dashboard', '#dashboard/monitoring'].includes(path)
+  const activeHref = integrations ? '#dashboard/integrations/'
+    : statusPages ? '#dashboard/status-pages/'
+    : incidents ? '#dashboard/incidents/'
+    : listing || newMonitor || edit ? '#dashboard/monitoring/' : null
 
   return (
     <div className="dashboard min-h-svh bg-canvas text-ink">
@@ -126,16 +131,8 @@ export function DashboardPage({
               <a
                 key={label}
                 href={href}
-                aria-current={
-                  (
-                    href === '#dashboard/monitoring/'
-                      ? listing || newMonitor || Boolean(edit)
-                      : href.replace(/\/$/, '') === path
-                  )
-                    ? 'page'
-                    : undefined
-                }
-                className={`sidebar-link ${(href === '#dashboard/monitoring/' ? listing || newMonitor || Boolean(edit) : href.replace(/\/$/, '') === path) ? 'bg-sage text-green' : 'hover:bg-sage'}`}
+                aria-current={href === activeHref ? 'page' : undefined}
+                className={`sidebar-link ${href === activeHref ? 'bg-sage text-green' : 'hover:bg-sage'}`}
               >
                 <Icon size={18} />
                 {label}
@@ -193,7 +190,8 @@ export function DashboardPage({
           ) : statusPages ? (
             <StatusPagesDashboard key={user.id} />
           ) : incidents ? (
-            <IncidentsPage key={user.id} />
+            incidentDetail ? <IncidentDetailsPage key={`${user.id}-${path}`} incidentId={Number(incidentDetail[1])} />
+              : <IncidentsPage key={user.id} />
           ) : newMonitor || edit ? (
             <MonitorEditorPage
               key={`${user.id}-${path}`}
