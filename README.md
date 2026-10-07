@@ -9,11 +9,12 @@ StatusRobot is an open-source, self-hosted uptime monitoring application for web
 - Create multiple public status pages and choose which monitors appear on each page.
 - Pin one status page as the default homepage, replacing the landing page.
 - Receive Discord webhook notifications when a monitor changes status.
+- Track outages and recoveries in the private Incidents tab.
 - Sign in with email and password, GitHub or Discord.
 
 The frontend uses React, TypeScript and Tailwind CSS. The backend uses Java and Spring Boot, with MySQL for accounts and configuration and MongoDB for monitoring history.
 
-Incidents, maintenance and team management are sidebar placeholders for now.
+Maintenance and team management are sidebar placeholders for now.
 
 ## Requirements
 
@@ -117,6 +118,25 @@ Use the Monitoring tab to add an HTTP or HTTPS monitor. Add a Discord webhook un
 Under Status Pages, create a page and select the monitors you want to publish. Public pages are available at `/#status/your-page-slug`.
 
 Only the server owner can use **Pin Default**. Set `STATUS_PAGE_OWNER_EMAIL` to that account's email before starting the backend. If it is not set, the earliest registered account is treated as the owner. Only one page can be the default at a time; unpinning it restores the landing page.
+
+## Incidents
+
+The Incidents tab lists outages for your own monitors. A failed HTTP check opens an incident. Repeated failures stay in the same incident, and the next successful response closes it. A slow but successful response counts as recovery, even if the monitor is still marked as degraded.
+
+Open an incident to see the first failure, detection time, recovery time and duration. Use the open and resolved filters to browse the history. Lists show 20 incidents per page. Refresh to load the latest checks.
+
+Pausing a monitor does not close its incident. Recovery is confirmed by a successful check after monitoring resumes. Deleting a monitor removes its check history and incidents too.
+
+Incidents are stored in the MySQL `incidents` table. Hibernate creates it on startup with the existing `spring.jpa.hibernate.ddl-auto=update` setting. No new environment variables are required. The database account needs permission to create the table and its indexes.
+
+The monitoring check saves the monitor state and incident in one database transaction. A unique open-monitor ID prevents two open incidents for the same monitor. Incident responses contain a short failure description, not raw exception messages or webhook details.
+
+The API requires a signed-in session:
+
+- `GET /api/incidents?status=all&page=0` lists your incidents. Status can be `all`, `open` or `resolved`, and page numbers start at zero.
+- `GET /api/incidents/{id}` returns one of your incidents. Another user's incident returns 404.
+
+History starts with checks after this feature is installed. Existing MongoDB logs are not converted into incidents. Manual updates, public status-page incidents and OpenAI explanations are not included yet.
 
 ## Optional OAuth sign-in
 
