@@ -157,7 +157,11 @@ Set `OPENAI_API_KEY` on the backend to enable **Incident help**. Keep the key in
 
 Open an incident, optionally add context, confirm consent and click **Ask OpenAI**. The backend sends the check result, progress and start and recovery times, plus only the context you enter for this request. Monitor names, URLs and saved update messages are not sent. This also means you need to enter context for a useful explanation of a manual incident. Do not include secrets or personal details.
 
-The request uses the [OpenAI Responses API](https://developers.openai.com/api/docs/guides/text) with `store: false`, no tools and a maximum of 800 output tokens. This setting disables response storage for later API retrieval. It does not promise zero retention under every OpenAI data policy.
+The request uses the [OpenAI Responses API](https://developers.openai.com/api/docs/guides/text) with `store: false` and no tools. This setting disables response storage for later API retrieval. It does not promise zero retention under every OpenAI data policy.
+
+For the budget model, set `OPENAI_MODEL=gpt-5-nano-2025-08-07` on the backend. Both this snapshot and the `gpt-5-nano` alias use minimal reasoning, low verbosity and a 2000-token output limit. Other models keep the 800-token limit. Answers are requested to stay under 180 words. Reasoning tokens count toward the limit and are billed as output, so a lower listed token price does not always mean a cheaper finished answer. This snapshot is deprecated and [scheduled to shut down on December 11, 2026](https://developers.openai.com/api/docs/deprecations). Check availability before a new deployment.
+
+An incomplete response is not shown as a finished analysis. If OpenAI reports that it reached the token limit, the app explains this instead of returning the same generic error for every incomplete response. There are no automatic retries that could add costs.
 
 Suggestions are shown privately and are not saved automatically. **Use as update draft** copies the text into the message field. Review it before saving or publishing. Suggestions can be wrong and cannot confirm a root cause or make changes to your services.
 

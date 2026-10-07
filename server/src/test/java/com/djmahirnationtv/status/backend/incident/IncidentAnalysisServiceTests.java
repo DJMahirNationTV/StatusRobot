@@ -43,6 +43,8 @@ class IncidentAnalysisServiceTests {
                     var body = JsonMapper.builder().build().readTree(((MockClientHttpRequest) request).getBodyAsString());
                     assertThat(body.path("store").asBoolean()).isFalse();
                     assertThat(body.path("max_output_tokens").asInt()).isEqualTo(800);
+                    assertThat(body.has("reasoning")).isFalse();
+                    assertThat(body.has("text")).isFalse();
                     assertThat(body.path("input").asString()).contains("503", "The deployment just changed.")
                             .doesNotContain("Private", "secret", "test-key");
                 })
@@ -50,6 +52,43 @@ class IncidentAnalysisServiceTests {
         var result = service.analyze(incident(), 7L, true, "The deployment just changed.");
         assertThat(result.text()).isEqualTo("The check received HTTP 503.\n\nCheck the service logs. The cause is not confirmed.");
         assertThat(result.model()).isEqualTo("test-model");
+        server.verify();
+    }
+
+    @Test
+    void nanoAliasAndSnapshotUseMinimalReasoningAndLeaveRoomForTheAnswer() {
+        for (String model : List.of("gpt-5-nano", "gpt-5-nano-2025-08-07")) {
+            var builder = RestClient.builder().baseUrl("https://api.openai.com/v1");
+            var server = MockRestServiceServer.bindTo(builder).build();
+            var service = new IncidentAnalysisService("test-key", model, builder.build(), Clock.systemUTC());
+            server.expect(requestTo("https://api.openai.com/v1/responses"))
+                    .andExpect(request -> {
+                        var body = JsonMapper.builder().build().readTree(((MockClientHttpRequest) request).getBodyAsString());
+                        assertThat(body.path("model").asString()).isEqualTo(model);
+                        assertThat(body.path("reasoning").path("effort").asString()).isEqualTo("minimal");
+                        assertThat(body.path("text").path("verbosity").asString()).isEqualTo("low");
+                        assertThat(body.path("max_output_tokens").asInt()).isEqualTo(2000);
+                        assertThat(body.path("store").asBoolean()).isFalse();
+                        assertThat(body.has("temperature")).isFalse();
+                    })
+                    .andRespond(withSuccess(ANSWER, MediaType.APPLICATION_JSON));
+            assertThat(service.analyze(incident(), 1L, true, "").model()).isEqualTo(model);
+            server.verify();
+        }
+    }
+
+    @Test
+    void tokenExhaustionExplainsTheLimitWithoutReturningPartialTextOrRetrying() {
+        var builder = RestClient.builder().baseUrl("https://api.openai.com/v1");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        var service = new IncidentAnalysisService("test-key", "gpt-5-nano-2025-08-07", builder.build(), Clock.systemUTC());
+        server.expect(requestTo("https://api.openai.com/v1/responses")).andRespond(withSuccess("""
+                {"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},
+                "output":[{"type":"message","role":"assistant","content":[{"type":"output_text",
+                "text":"Incomplete suggestion that should not be shown"}]}]}
+                """, MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> service.analyze(incident(), 1L, true, ""))
+                .hasMessageContaining("analysis token limit").hasMessageNotContaining("Incomplete suggestion");
         server.verify();
     }
 
