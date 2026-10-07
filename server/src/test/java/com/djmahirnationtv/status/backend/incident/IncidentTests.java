@@ -5,6 +5,7 @@ import com.djmahirnationtv.status.backend.ping.repository.PingLogRepository;
 import com.djmahirnationtv.status.backend.monitor.model.Monitor;
 import com.djmahirnationtv.status.backend.monitor.model.MonitorStatus;
 import com.djmahirnationtv.status.backend.monitor.repository.MonitorRepository;
+import com.djmahirnationtv.status.backend.monitor.MonitorService;
 import com.djmahirnationtv.status.backend.ping.PingExecutionService;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
@@ -23,7 +24,9 @@ import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:incident-tests;MODE=MySQL;DB_CLOSE_DELAY=-1")
@@ -34,6 +37,7 @@ class IncidentTests {
     @Autowired IncidentService service;
     @Autowired MockMvc mvc;
     @Autowired MonitorRepository monitors;
+    @Autowired MonitorService monitorService;
     @Autowired PingExecutionService execution;
     @MockitoBean PingScheduler scheduler;
     @MockitoBean PingLogRepository pings;
@@ -191,6 +195,24 @@ class IncidentTests {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void deletingAMonitorClearsOnlyItsIncidentHistory() throws Exception {
+        var monitor = checkedMonitor();
+        monitor.setId(null);
+        monitor = monitors.saveAndFlush(monitor);
+        service.recordCheck(monitor, 503);
+        var other = incidents.saveAndFlush(new Incident(2L, 999L, "Other website", "HTTP 500", Instant.now()));
+        String path = "/api/monitors/" + monitor.getId();
+        mvc.perform(delete(path).with(user("2")).with(csrf())).andExpect(status().isNotFound());
+        mvc.perform(delete(path).with(user("1"))).andExpect(status().isForbidden());
+        assertThat(incidents.count()).isEqualTo(2);
+
+        monitorService.deleteMonitor(monitor.getId(), 1L);
+        assertThat(incidents.count()).isEqualTo(1);
+        assertThat(incidents.findById(other.getId())).isPresent();
+        assertThat(monitors.findById(monitor.getId())).isEmpty();
     }
 
     private Monitor checkedMonitor() {

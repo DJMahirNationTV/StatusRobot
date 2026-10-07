@@ -11,4 +11,5 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     Page<Incident> findByOwnerId(Long ownerId, Pageable pageable);
     Page<Incident> findByOwnerIdAndResolvedAtIsNull(Long ownerId, Pageable pageable);
     Page<Incident> findByOwnerIdAndResolvedAtIsNotNull(Long ownerId, Pageable pageable);
+    void deleteByMonitorId(Long monitorId);
 }
