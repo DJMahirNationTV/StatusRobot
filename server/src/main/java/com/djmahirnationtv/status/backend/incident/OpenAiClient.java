@@ -69,12 +69,12 @@ public class OpenAiClient {
                     .retrieve().body(OpenAiResponse.class);
             if (response == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                        "OpenAI returned an incomplete analysis. Please try again later.");
+                        "OpenAI returned an incomplete analysis. Please try again later. (Error 502)");
             }
             return response.answerText();
         } catch (RestClientException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "OpenAI could not complete this request. Check the server configuration or try again later.");
+                    "OpenAI could not complete this request. Check the server configuration or try again later. (Error 502)");
         }
     }
 
@@ -105,7 +105,7 @@ public class OpenAiClient {
     }
 
     static String checkResultForOpenAi(String cause) {
-        // Only known check messages are sent, not raw errors that could contain secrets.
+        // Only messages are sent that are relevant to the incident analysis, not all possible messages. (e.g. "HTTP check returned 200." is not sent, but "HTTP check returned 500." is sent.)
         if ("No HTTP response was received.".equals(cause)
                 || (cause != null && cause.matches("HTTP check returned [1-5][0-9]{2}\\."))) {
             return cause;
