@@ -2,6 +2,8 @@ package com.djmahirnationtv.status.backend.incident;
 
 import com.djmahirnationtv.status.backend.ping.PingScheduler;
 import com.djmahirnationtv.status.backend.ping.repository.PingLogRepository;
+import com.djmahirnationtv.status.backend.monitor.model.Monitor;
+import com.djmahirnationtv.status.backend.monitor.model.MonitorStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -102,5 +104,54 @@ class IncidentTests {
                 .andExpect(status().isBadRequest());
         mvc.perform(get("/api/incidents").with(user("1")).param("page", "abc"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void repeatedFailuresShareAnIncidentAndRecoveryClosesIt() {
+        var monitor = checkedMonitor();
+        service.recordCheck(monitor, 503);
+        monitor.setLastCheckedAt(monitor.getLastCheckedAt().plusSeconds(60));
+        service.recordCheck(monitor, 502);
+        assertThat(incidents.count()).isEqualTo(1);
+        var incident = incidents.findByOpenMonitorId(10L).orElseThrow();
+        assertThat(incident.getCause()).isEqualTo("HTTP check returned 503.");
+
+        monitor.setStatus(MonitorStatus.DEGRADED);
+        monitor.setLastCheckedAt(monitor.getLastCheckedAt().plusSeconds(60));
+        service.recordCheck(monitor, 200);
+        service.recordCheck(monitor, 200);
+        var resolved = incidents.findById(incident.getId()).orElseThrow();
+        assertThat(resolved.getResolvedAt()).isEqualTo(monitor.getLastCheckedAt());
+        assertThat(incidents.findByOpenMonitorId(10L)).isEmpty();
+
+        monitor.setStatus(MonitorStatus.DOWN);
+        monitor.setLastCheckedAt(monitor.getLastCheckedAt().plusSeconds(60));
+        service.recordCheck(monitor, 0);
+        assertThat(incidents.count()).isEqualTo(2);
+        assertThat(incidents.findByOpenMonitorId(10L).orElseThrow().getCause())
+                .isEqualTo("No HTTP response was received.");
+    }
+
+    @Test
+    void pausingDoesNotClaimARecoveryAndLegacyMonitorsAreIgnored() {
+        var monitor = checkedMonitor();
+        service.recordCheck(monitor, 503);
+        monitor.setStatus(MonitorStatus.PAUSED);
+        service.recordCheck(monitor, 200);
+        assertThat(incidents.findByOpenMonitorId(10L)).isPresent();
+        monitor.setOwnerId(null);
+        monitor.setId(11L);
+        monitor.setStatus(MonitorStatus.DOWN);
+        service.recordCheck(monitor, 503);
+        assertThat(incidents.count()).isEqualTo(1);
+    }
+
+    private Monitor checkedMonitor() {
+        var monitor = new Monitor("Website", "https://example.com", "GET", 60, 5);
+        monitor.setId(10L);
+        monitor.setOwnerId(1L);
+        monitor.setStatus(MonitorStatus.DOWN);
+        monitor.setLastCheckedAt(Instant.parse("2026-10-07T08:00:00Z"));
+        return monitor;
     }
 }

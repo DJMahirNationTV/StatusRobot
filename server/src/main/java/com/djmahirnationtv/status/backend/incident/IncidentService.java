@@ -1,5 +1,7 @@
 package com.djmahirnationtv.status.backend.incident;
 
+import com.djmahirnationtv.status.backend.monitor.model.Monitor;
+import com.djmahirnationtv.status.backend.monitor.model.MonitorStatus;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -15,6 +17,24 @@ public class IncidentService {
 
     public IncidentService(IncidentRepository incidents) {
         this.incidents = incidents;
+    }
+
+    @Transactional
+    public void recordCheck(Monitor monitor, int statusCode) {
+        if (monitor.getOwnerId() == null || monitor.getLastCheckedAt() == null
+                || monitor.getStatus() == MonitorStatus.PAUSED) return;
+
+        var open = incidents.findByOpenMonitorId(monitor.getId());
+        if (monitor.getStatus() == MonitorStatus.DOWN) {
+            if (open.isEmpty()) {
+                String cause = statusCode == 0 ? "No HTTP response was received."
+                        : "HTTP check returned " + statusCode + ".";
+                incidents.save(new Incident(monitor.getOwnerId(), monitor.getId(), monitor.getName(),
+                        cause, monitor.getLastCheckedAt()));
+            }
+        } else {
+            open.ifPresent(incident -> incident.resolve(monitor.getLastCheckedAt()));
+        }
     }
 
     public record IncidentResponse(Long id, Long monitorId, String monitorName, String cause,
