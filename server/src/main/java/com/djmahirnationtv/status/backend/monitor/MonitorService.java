@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import java.util.List;
 import com.djmahirnationtv.status.backend.integration.IntegrationService;
 import com.djmahirnationtv.status.backend.statuspage.StatusPageRepository;
+import com.djmahirnationtv.status.backend.incident.IncidentRepository;
 
 @Service
 public class MonitorService {
@@ -21,13 +22,15 @@ public class MonitorService {
     private final PingLogRepository pingLogRepository;
     private final IntegrationService integrations;
     private final StatusPageRepository statusPages;
+    private final IncidentRepository incidents;
 
     public MonitorService(MonitorRepository monitorRepository, PingLogRepository pingLogRepository, IntegrationService integrations,
-                          StatusPageRepository statusPages) {
+                          StatusPageRepository statusPages, IncidentRepository incidents) {
         this.monitorRepository = monitorRepository;
         this.pingLogRepository = pingLogRepository;
         this.integrations = integrations;
         this.statusPages = statusPages;
+        this.incidents = incidents;
     }
 
     public List<MonitorResponse> getAllMonitors() {
@@ -101,6 +104,7 @@ public class MonitorService {
             page.getMonitors().removeIf(monitor -> monitor.getId().equals(id));
         }
         statusPages.flush();
+        incidents.deleteByMonitorId(id);
         monitorRepository.deleteById(id);
         pingLogRepository.deleteByMonitorId(id); // deletes the logs from mongodb (using id)
     }

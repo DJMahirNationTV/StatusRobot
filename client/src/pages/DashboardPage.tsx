@@ -9,14 +9,15 @@ import {
   Menu,
   X,
   ExternalLink,
-  ChevronRight,
-  Network
+  ChevronRight
 } from 'lucide-react'
 import type { AuthUser } from '../services/auth'
 import { MonitoringPage } from './MonitoringPage'
 import { MonitorEditorPage } from './MonitorEditorPage'
 import { IntegrationsPage } from './IntegrationsPage'
 import { StatusPagesDashboard } from './StatusPagesDashboard'
+import { IncidentsPage, IncidentDetailsPage } from './IncidentsPage'
+import { IncidentEditorPage } from './IncidentEditorPage'
 
 interface DashboardPageProps {
   user: AuthUser | null
@@ -26,8 +27,7 @@ interface DashboardPageProps {
 }
 const navigation = [
   { icon: Activity, label: 'Monitoring', href: '#dashboard/monitoring/' },
-  { icon: Network, label: '3rd party monitors' },
-  { icon: ShieldAlert, label: 'Incidents' },
+  { icon: ShieldAlert, label: 'Incidents', href: '#dashboard/incidents/' },
   { icon: Radio, label: 'Status pages', href: '#dashboard/status-pages/' },
   { icon: Wrench, label: 'Maintenance' },
   { icon: Users, label: 'Team members' },
@@ -64,12 +64,19 @@ export function DashboardPage({
   const path = route.replace(/\/$/, '')
   const integrations = path === '#dashboard/integrations'
   const statusPages = path === '#dashboard/status-pages'
+  const incidentDetail = path.match(/^#dashboard\/incidents\/(\d+)$/)
+  const newIncident = ['#dashboard/incidents/new', '#dashboard/incidents/create'].includes(path)
+  const incidents = path === '#dashboard/incidents' || Boolean(incidentDetail) || newIncident
   const newMonitor = [
     '#dashboard/monitoring/new',
     '#dashboard/monitoring/create'
   ].includes(path)
   const edit = path.match(/^#dashboard\/monitoring\/(\d+)\/edit$/)
   const listing = ['#dashboard', '#dashboard/monitoring'].includes(path)
+  const activeHref = integrations ? '#dashboard/integrations/'
+    : statusPages ? '#dashboard/status-pages/'
+    : incidents ? '#dashboard/incidents/'
+    : listing || newMonitor || edit ? '#dashboard/monitoring/' : null
 
   return (
     <div className="dashboard min-h-svh bg-canvas text-ink">
@@ -126,16 +133,8 @@ export function DashboardPage({
               <a
                 key={label}
                 href={href}
-                aria-current={
-                  (
-                    href === '#dashboard/monitoring/'
-                      ? !integrations && !statusPages
-                      : href.replace(/\/$/, '') === path
-                  )
-                    ? 'page'
-                    : undefined
-                }
-                className={`sidebar-link ${(href === '#dashboard/monitoring/' ? !integrations && !statusPages : href.replace(/\/$/, '') === path) ? 'bg-sage text-green' : 'hover:bg-sage'}`}
+                aria-current={href === activeHref ? 'page' : undefined}
+                className={`sidebar-link ${href === activeHref ? 'bg-sage text-green' : 'hover:bg-sage'}`}
               >
                 <Icon size={18} />
                 {label}
@@ -192,6 +191,10 @@ export function DashboardPage({
             <IntegrationsPage key={user.id} />
           ) : statusPages ? (
             <StatusPagesDashboard key={user.id} />
+          ) : incidents ? (
+            newIncident ? <IncidentEditorPage key={user.id} />
+              : incidentDetail ? <IncidentDetailsPage key={`${user.id}-${path}`} incidentId={Number(incidentDetail[1])} />
+              : <IncidentsPage key={user.id} />
           ) : newMonitor || edit ? (
             <MonitorEditorPage
               key={`${user.id}-${path}`}

@@ -61,7 +61,7 @@ export function MonitoringPage() {
         await monitorApi.remove(monitor.id)
         setMonitors((list) => list.filter((item) => item.id !== monitor.id))
         setDeleting(null)
-        setNotice('Monitor and check history deleted.')
+        setNotice('Monitor, check history and incidents deleted.')
       } else {
         const updated = await monitorApi.togglePause(monitor.id)
         setMonitors((list) =>
@@ -300,7 +300,7 @@ export function MonitoringPage() {
                         className="mt-4 rounded-lg border border-line bg-canvas p-4"
                       >
                         <p className="text-sm">
-                          Delete {monitor.name} and its check history? This
+                          Delete {monitor.name} and its check and incident history? This
                           cannot be undone.
                         </p>
                         <div className="mt-3 flex gap-3">

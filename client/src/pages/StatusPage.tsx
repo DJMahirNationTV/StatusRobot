@@ -5,6 +5,8 @@ import { statusPageApi } from '../services/statusPages'
 import type { StatusPageData } from '../services/statusPages'
 import type { MonitorWithDetails } from '../types/monitor'
 import { MonitorHistoryPanel } from '../components/MonitorHistoryPanel'
+import { stageLabels } from '../services/incidents'
+import type { PublicIncident } from '../services/incidents'
 
 export function StatusPage({
   slug,
@@ -14,6 +16,7 @@ export function StatusPage({
   page?: StatusPageData
 }) {
   const [monitors, setMonitors] = useState<MonitorWithDetails[]>([])
+  const [incidents, setIncidents] = useState<PublicIncident[]>([])
   const [title, setTitle] = useState(page?.name ?? 'Live status')
   const [description, setDescription] = useState(page?.description ?? '')
   const [loading, setLoading] = useState(true)
@@ -29,11 +32,10 @@ export function StatusPage({
       if (pending) return
       pending = true
       try {
-        const current =
-          page ??
-          (slug
-            ? await statusPageApi.publicPage(slug)
-            : await statusPageApi.defaultPage())
+        const pageSlug = slug ?? page?.slug
+        const current = pageSlug
+          ? await statusPageApi.publicPage(pageSlug)
+          : await statusPageApi.defaultPage()
         const list = current ? current.monitors : await api.getMonitors()
         const detailed = await Promise.all(
           list.map(async (monitor) => {
@@ -47,6 +49,7 @@ export function StatusPage({
           setTitle(current?.name ?? 'Live status')
           setDescription(current?.description ?? '')
           setMonitors(detailed)
+          setIncidents(current?.incidents ?? [])
           setUpdatedAt(new Date())
           setError('')
           setHistoryRefresh((value) => value + 1)
@@ -80,12 +83,13 @@ export function StatusPage({
   const hasSlow = active.some(
     (monitor) => monitor.lastCheckedAt && monitor.status === 'DEGRADED'
   )
-  const allOperational = hasChecks && !hasFailure && !hasSlow
+  const hasIncident = incidents.some(incident => !incident.resolvedAt)
+  const allOperational = hasChecks && !hasFailure && !hasSlow && !hasIncident
   const heading = error
     ? 'Status is currently unavailable'
     : monitors.length === 0
       ? 'No monitors to show yet'
-      : hasFailure
+      : hasFailure || hasIncident
         ? 'Some services need attention'
         : hasSlow
           ? 'Some services are responding slowly'
@@ -128,7 +132,7 @@ export function StatusPage({
           role="status"
           className={`mb-8 flex items-center gap-4 rounded-xl border p-5 ${error ? 'border-amber-200 bg-amber-50' : allOperational ? 'border-line bg-sage' : 'border-line bg-white'}`}
         >
-          {error || hasFailure || hasSlow ? (
+          {error || hasFailure || hasSlow || hasIncident ? (
             <CircleAlert className="shrink-0 text-amber-700" size={23} />
           ) : (
             <Activity className="shrink-0 text-green" size={23} />
@@ -168,6 +172,28 @@ export function StatusPage({
             Showing the last available results. These may be out of date.
           </p>
         )}
+        {incidents.length > 0 && <section aria-label="Published incidents" className="mb-8">
+          <h2 className="mb-4 font-heading text-xl font-bold">Incidents</h2>
+          <div className="space-y-4">
+            {incidents.map(incident => <details key={incident.id} open={!incident.resolvedAt} className="rounded-xl border border-line bg-white p-5 sm:p-6">
+              <summary className="cursor-pointer break-words text-sm font-semibold">
+                {incident.title}
+                <span className={`ml-3 inline-block rounded-md px-2 py-1 text-xs font-medium ${incident.resolvedAt ? 'bg-sage text-green' : 'bg-amber-50 text-amber-800'}`}>{stageLabels[incident.stage]}</span>
+              </summary>
+              <p className="mt-3 text-xs text-muted">Started {new Date(incident.startedAt).toLocaleString()}
+                {incident.resolvedAt && ` | Resolved ${new Date(incident.resolvedAt).toLocaleString()}`}
+              </p>
+              <ol className="mt-5 space-y-5 border-l border-line pl-4">
+                {incident.updates.map((update, index) => <li key={index}>
+                  <h3 className="text-xs font-semibold">{stageLabels[update.stage]}</h3>
+                  <time dateTime={update.createdAt} className="mt-1 block text-xs text-muted">{new Date(update.createdAt).toLocaleString()}</time>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-muted">{update.message}</p>
+                </li>)}
+              </ol>
+            </details>)}
+          </div>
+          <p className="mt-3 text-xs text-muted">Published incidents only, up to 40. Times use your local timezone.</p>
+        </section>}
         <div className="space-y-6">
           {monitors.map((monitor) => {
             const latest = monitor.pings?.[0]
