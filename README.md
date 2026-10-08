@@ -235,19 +235,28 @@ The backend build produces `server/target/app.jar`. The frontend build produces 
 
 ## Docker and deployment
 
-The root Dockerfile packages an already compiled backend JAR. After building the backend, run these commands from the repository root:
+The root Dockerfile packages an already compiled JAR containing both the backend and built frontend. Build the frontend first so Maven can include `client/dist` as Spring Boot static resources. Run these commands from the repository root:
 
 ```powershell
+Push-Location client
+npm ci
+npm run build
+Pop-Location
+Push-Location server
+.\mvnw.cmd clean package
+Pop-Location
 docker build -t statusrobot .
 ```
 
 Supply the backend environment variables when running the image and publish port `8080`. Inside a container, `localhost` refers to that container, not your host or another database container.
 
-The image currently contains only the backend. Deploy `client/dist` separately, or configure a web server to serve it and forward `/api`, `/oauth2` and `/login/oauth2` to the backend. Vite's development proxy is not included in the frontend production build. For a separately hosted API, set `VITE_API_URL` before building the frontend.
+Spring Boot serves the frontend at `/` and the API at `/api` on the same port. No separate frontend process or Render Static Site is needed. Leave `VITE_API_URL` unset for this deployment so the frontend uses `/api`. The UI uses hash routes, such as `/#dashboard`, which work on this single service. Rebuild the frontend before packaging the JAR whenever frontend code changes.
+
+You can still deploy `client/dist` separately. Vite's development proxy is not included in the frontend production build. For a separately hosted API, set `VITE_API_URL` to the backend URL including `/api` before building the frontend.
 
 For production, use HTTPS, keep secure session cookies enabled and set `FRONTEND_URL` and `OAUTH_REDIRECT_BASE_URL` to your actual frontend URL. Keep database credentials, OAuth secrets and the integration encryption key out of Git. Back up both databases and the encryption key.
 
-The GitHub workflow builds the frontend and backend, publishes the backend image to Docker Hub and triggers a Render deployment on pushes to `main` or `production`. It requires these repository Actions secrets:
+The GitHub workflow builds the frontend, downloads it into the backend build job, packages both in the JAR, publishes the image to Docker Hub and triggers a Render deployment on pushes to `main` or `production`. It requires these repository Actions secrets:
 
 - `DOCKER_USERNAME`: Docker Hub username.
 - `DOCKER_PASSWORD`: Docker Hub access token with permission to push images.
