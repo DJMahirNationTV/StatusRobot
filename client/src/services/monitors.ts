@@ -1,6 +1,7 @@
 import { API_BASE } from './api'
 import { csrfHeaders } from './auth'
 import type { Monitor, MonitorInput } from '../types/monitor'
+import type { IntegrationListing } from './integrations'
 
 async function request(path: string, method = 'GET', monitor?: MonitorInput) {
   const headers = method === 'GET' ? {} : await csrfHeaders()
@@ -30,11 +31,14 @@ async function request(path: string, method = 'GET', monitor?: MonitorInput) {
 }
 
 export const monitorApi = {
-  async list(): Promise<Monitor[]> {
-    return (await request('/mine')).json()
+  async list(workspaceId: number | null = null): Promise<Monitor[]> {
+    return (await request(`/mine${workspaceId === null ? '' : `?workspaceId=${workspaceId}`}`)).json()
   },
-  async create(monitor: MonitorInput): Promise<Monitor> {
-    return (await request('', 'POST', monitor)).json()
+  async create(monitor: MonitorInput, workspaceId: number | null = null): Promise<Monitor> {
+    return (await request(workspaceId === null ? '' : `?workspaceId=${workspaceId}`, 'POST', monitor)).json()
+  },
+  async integrations(workspaceId: number | null = null): Promise<IntegrationListing> {
+    return (await request(`/workspace/integrations${workspaceId === null ? '' : `?workspaceId=${workspaceId}`}`)).json()
   },
   async update(id: number, monitor: MonitorInput): Promise<Monitor> {
     return (await request(`/${id}`, 'PUT', monitor)).json()

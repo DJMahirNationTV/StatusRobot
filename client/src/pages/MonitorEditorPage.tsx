@@ -5,12 +5,15 @@ import { monitorApi } from '../services/monitors'
 import { integrationApi } from '../services/integrations'
 import type { IntegrationListing } from '../services/integrations'
 import type { Monitor, MonitorInput } from '../types/monitor'
+import { teamApi } from '../services/teams'
 
-export function MonitorEditorPage({ monitorId }: { monitorId: number | null }) {
+export function MonitorEditorPage({ monitorId, workspaceId }: { monitorId: number | null; workspaceId: number | null }) {
+  const workspaceQuery = workspaceId === null ? '' : `?workspace=${workspaceId}`
   const [data, setData] = useState<{
     monitor: Monitor | null
     listing: IntegrationListing
     selected: number[]
+    shared: boolean
   } | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -19,17 +22,20 @@ export function MonitorEditorPage({ monitorId }: { monitorId: number | null }) {
   useEffect(() => {
     let active = true
     Promise.all([
-      integrationApi.list(),
-      monitorId === null ? Promise.resolve([]) : monitorApi.list(),
+      monitorApi.integrations(workspaceId),
+      monitorId === null ? Promise.resolve([]) : monitorApi.list(workspaceId),
       monitorId === null
         ? Promise.resolve([])
-        : integrationApi.selected(monitorId)
+        : integrationApi.selected(monitorId),
+      teamApi.list()
     ])
-      .then(([listing, monitors, selected]) => {
+      .then(([listing, monitors, selected, team]) => {
+        const workspace = team.workspaces.find(item => workspaceId === null ? item.role === 'OWNER' : item.id === workspaceId)
+        if (!workspace || workspace.role === 'VIEWER') throw new Error('You do not have permission to edit monitors in this workspace.')
         const monitor = monitors.find((item) => item.id === monitorId) || null
         if (monitorId !== null && !monitor)
-          throw new Error('Monitor not found in your account.')
-        if (active) setData({ monitor, listing, selected })
+          throw new Error('Monitor not found in this workspace.')
+        if (active) setData({ monitor, listing, selected, shared: workspace.role !== 'OWNER' })
       })
       .catch((exception) => {
         if (active) setError(exception.message)
@@ -37,16 +43,16 @@ export function MonitorEditorPage({ monitorId }: { monitorId: number | null }) {
     return () => {
       active = false
     }
-  }, [monitorId, attempt])
+  }, [monitorId, workspaceId, attempt])
 
   async function save(input: MonitorInput) {
     if (busy) return
     setBusy(true)
     setError('')
     try {
-      if (monitorId === null) await monitorApi.create(input)
+      if (monitorId === null) await monitorApi.create(input, workspaceId)
       else await monitorApi.update(monitorId, input)
-      window.location.hash = '#dashboard/monitoring/'
+      window.location.hash = `#dashboard/monitoring/${workspaceQuery}`
     } catch (exception) {
       setError(
         exception instanceof Error
@@ -62,7 +68,7 @@ export function MonitorEditorPage({ monitorId }: { monitorId: number | null }) {
     setBusy(true)
     setError('')
     try {
-      const listing = await integrationApi.list()
+      const listing = await monitorApi.integrations(workspaceId)
       setData((current) => current && { ...current, listing })
     } catch (exception) {
       setError(
@@ -77,7 +83,7 @@ export function MonitorEditorPage({ monitorId }: { monitorId: number | null }) {
 
   return (
     <>
-      <a href="#dashboard/monitoring/" className="dashboard-action mb-6">
+      <a href={`#dashboard/monitoring/${workspaceQuery}`} className="dashboard-action mb-6">
         <ChevronLeft size={14} />
         Monitoring
       </a>
@@ -112,11 +118,12 @@ export function MonitorEditorPage({ monitorId }: { monitorId: number | null }) {
           integrations={data.listing.integrations}
           configured={data.listing.configured}
           selected={data.selected}
+          shared={data.shared}
           busy={busy}
           onRefreshIntegrations={refreshIntegrations}
           onSave={save}
           onCancel={() => {
-            window.location.hash = '#dashboard/monitoring/'
+            window.location.hash = `#dashboard/monitoring/${workspaceQuery}`
           }}
         />
       )}

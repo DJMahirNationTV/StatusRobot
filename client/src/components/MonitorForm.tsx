@@ -12,6 +12,7 @@ interface MonitorFormProps {
   configured: boolean
   selected: number[]
   onRefreshIntegrations: () => void
+  shared?: boolean
 }
 
 export function MonitorForm({
@@ -22,7 +23,8 @@ export function MonitorForm({
   integrations,
   configured,
   selected,
-  onRefreshIntegrations
+  onRefreshIntegrations,
+  shared = false
 }: MonitorFormProps) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -131,18 +133,19 @@ export function MonitorForm({
                 <Cable size={20} className="text-green" />
                 Connect integrations
               </h2>
-              <a
+              {!shared && <a
                 href="#dashboard/integrations/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="dashboard-action"
               >
                 Manage integrations (new tab)
-              </a>
+              </a>}
             </div>
             <p className="mt-3 text-xs leading-6 text-muted">
               Select the Discord channels that should receive outage and
               recovery alerts.
+              {shared && ' These channels belong to the workspace owner. Only the owner can manage them.'}
             </p>
             <button
               type="button"
