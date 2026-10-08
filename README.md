@@ -250,6 +250,8 @@ docker build -t statusrobot .
 
 Supply the backend environment variables when running the image and publish port `8080`. Inside a container, `localhost` refers to that container, not your host or another database container.
 
+On Render, the server listens on the platform's `PORT` environment variable and binds to `0.0.0.0`. Without `PORT`, it uses `8080` for local development. When updating an existing Render service running an older image, set `PORT=8080` to match that image until the new build is deployed. Leave the Render Health Check Path blank for TCP checks; this app does not expose `/health`.
+
 Spring Boot serves the frontend at `/` and the API at `/api` on the same port. No separate frontend process or Render Static Site is needed. Leave `VITE_API_URL` unset for this deployment so the frontend uses `/api`. The UI uses hash routes, such as `/#dashboard`, which work on this single service. Rebuild the frontend before packaging the JAR whenever frontend code changes.
 
 You can still deploy `client/dist` separately. Vite's development proxy is not included in the frontend production build. For a separately hosted API, set `VITE_API_URL` to the backend URL including `/api` before building the frontend.
