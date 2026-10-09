@@ -211,7 +211,7 @@ export function MonitoringPage({ workspaceId }: { workspaceId: number | null }) 
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
             {loading && (
               <p role="status" className="p-10 text-center text-sm text-muted">
-                Loading monitors...
+                Loading...
               </p>
             )}
             {!loading && monitors.length === 0 && !error && (
@@ -395,20 +395,6 @@ export function MonitoringPage({ workspaceId }: { workspaceId: number | null }) 
                 <span>{loading ? '-' : waiting}</span>
               </p>
             </div>
-          </section>
-          <section className="dashboard-panel p-5">
-            <h2 className="text-sm font-semibold">Stay in the loop.</h2>
-            <p className="mt-3 text-xs leading-6 text-muted">
-              {workspace?.role === 'OWNER'
-                ? 'Send outage and recovery alerts straight to your Discord channel.'
-                : 'The workspace owner manages Discord integrations. Editors can select them when editing a monitor.'}
-            </p>
-            {workspace?.role === 'OWNER' && <a
-              href="#dashboard/integrations/"
-              className="mt-4 inline-block text-xs font-semibold text-green hover:underline"
-            >
-              Manage integrations
-            </a>}
           </section>
         </aside>
       </div>

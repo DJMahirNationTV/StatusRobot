@@ -153,12 +153,6 @@ export function MaintenancePage() {
           </nav>}
           <p className="mt-4 text-xs text-muted">Only your schedules appear here. Times use your local timezone. Updates every 30 seconds.</p>
         </section>
-        <aside className="dashboard-panel p-5">
-          <h2 className="text-sm font-semibold">How maintenance works.</h2>
-          <p className="mt-3 text-xs leading-6 text-muted">Automatic checks are skipped during the window and resume afterwards. Existing incidents are not closed automatically by maintenance.</p>
-          <p className="mt-3 text-xs leading-6 text-muted">Overlapping windows keep checks skipped until no active window remains. A manually paused monitor stays paused.</p>
-          <p className="mt-3 text-xs leading-6 text-muted">Publishing makes the title, description and times visible on status pages that include the selected monitors. Keep private details out of notices.</p>
-        </aside>
       </div>
     </>
   )

@@ -65,7 +65,7 @@ export function MaintenanceEditorPage({ maintenanceId }: { maintenanceId: number
       {error && <p role="alert" className="dashboard-error mb-5">{error}
         {!data && <button onClick={() => { setError(''); setAttempt(value => value + 1) }} className="ml-3 underline">Retry</button>}
       </p>}
-      {!data && !error && <p role="status" className="text-sm text-muted">Loading your monitors...</p>}
+      {!data && !error && <p role="status" className="text-sm text-muted">Loading...</p>}
       {data && !editable && <div className="dashboard-panel p-6">
         <p className="text-sm">Only upcoming maintenance can be edited. You can cancel ongoing work from the maintenance list.</p>
         <a href="#dashboard/maintenance/" className="dashboard-action mt-5">Back to maintenance</a>
@@ -91,7 +91,7 @@ export function MaintenanceEditorPage({ maintenanceId }: { maintenanceId: number
               <input type="datetime-local" required value={endsAt} onChange={event => setEndsAt(event.target.value)} className="form-input mt-2 w-full min-w-0" />
             </label>
           </div>
-          <p className="text-xs leading-6 text-muted">Times use your browser's local timezone. The backend stores them in UTC. Checks already running are not interrupted.</p>
+          <p className="text-xs leading-6 text-muted">It uses your browsers local timezone, checks already running are not interrupted.</p>
         </fieldset>
         <fieldset disabled={busy} className="dashboard-panel p-5 sm:p-7">
           <legend className="sr-only">Affected monitors</legend>
@@ -125,7 +125,7 @@ export function MaintenanceEditorPage({ maintenanceId }: { maintenanceId: number
 
 function toLocalDateTime(value: string) {
   const date = new Date(value)
-  // datetime-local needs local time without the timezone suffix.
+  // local time without the timezone suffix (like Z00 or something like that)
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 

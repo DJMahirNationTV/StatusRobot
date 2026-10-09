@@ -128,13 +128,6 @@ export function IncidentsPage() {
           )}
           <p className="mt-4 text-xs text-muted">Only your incidents appear here. Times use your local timezone.</p>
         </section>
-        <aside className="dashboard-panel p-5">
-          <h2 className="text-sm font-semibold">How incidents work.</h2>
-          <p className="mt-3 text-xs leading-6 text-muted">A failed check opens an incident. Further failures stay in the same incident until the monitor responds successfully.</p>
-          <p className="mt-3 text-xs leading-6 text-muted">Pausing does not confirm recovery. Deleting a monitor also deletes its incident history.</p>
-          <p className="mt-3 text-xs leading-6 text-muted">Manual incidents stay open until you resolve them. Publish an incident to share its updates on your status pages.</p>
-          <a href="#dashboard/monitoring/" className="mt-4 inline-block text-xs font-semibold text-green hover:underline">Manage monitors</a>
-        </aside>
       </div>
     </>
   )
