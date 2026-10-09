@@ -22,7 +22,7 @@ public class Maintenance {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Prevent two requests from saving different changes over each other.
+    // preventing 2 requests from saving different changes over each other, so we can make sure, that the user is editing the latest version of the maintenance
     @Version
     private long version;
 
@@ -59,7 +59,7 @@ public class Maintenance {
 
     public Maintenance(Long ownerId) { this.ownerId = ownerId; }
 
-    // Work out the status from the dates. No extra job needs to update it.
+    // work out the status from the dates... No extra job needs to update it
     public Status statusAt(Instant now) {
         if (cancelled) return Status.CANCELLED;
         if (now.isBefore(startsAt)) return Status.SCHEDULED;

@@ -46,7 +46,7 @@ public class MaintenanceService {
     }
 
     @Transactional(readOnly = true)
-    public Response get(Long id, Long ownerId) { return response(owned(id, ownerId), Instant.now()); }
+    public Response get(Long id, Long ownerId) { return response(owned(id, ownerId), Instant.now()); } // only the owner can view the details of a maintenance
 
     @Transactional
     public Response save(Long id, SaveRequest input, Long ownerId) {
@@ -64,7 +64,7 @@ public class MaintenanceService {
             if (!ownerId.equals(monitor.getOwnerId())) throw badRequest("Select monitors from your own account.");
         }
         window.setTitle(input.title().strip());
-        window.setDescription(input.description() == null ? "" : input.description().strip());
+        window.setDescription(input.description() ==null ? "" : input.description().strip()); // description is optional so we allow null and convert it to an empty string
         window.setStartsAt(input.startsAt());
         window.setEndsAt(input.endsAt());
         window.setPublished(input.published());
@@ -122,7 +122,7 @@ public class MaintenanceService {
 
     @Transactional
     public void removeMonitor(Long monitorId) {
-        // Remove the links first, otherwise the database cannot delete the monitor.
+        // remove the links between the monitor and any maintenance windows, and cancel any windows that are left with no monitors
         Instant now = Instant.now();
         for (Maintenance window : windows.findByMonitorsId(monitorId)) {
             window.getMonitors().removeIf(monitor -> monitor.getId().equals(monitorId));
@@ -135,7 +135,7 @@ public class MaintenanceService {
 
     private Maintenance owned(Long id, Long ownerId) {
         return windows.findByIdAndOwnerId(id, ownerId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Maintenance not found."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Maintenance was not found."));
     }
 
     private Response response(Maintenance window, Instant now) {

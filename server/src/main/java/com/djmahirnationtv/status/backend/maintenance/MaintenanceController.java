@@ -58,7 +58,7 @@ public class MaintenanceController {
     @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, String> invalid() {
-        return Map.of("message", "Enter a title, valid start and end times, and between 1 and 30 monitor IDs.");
+        return Map.of("message", "Enter a title, a valid start and end times and between 1 and 30 monitor IDs.");
     }
 
     @ExceptionHandler({DataIntegrityViolationException.class, ObjectOptimisticLockingFailureException.class})
