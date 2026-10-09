@@ -14,10 +14,11 @@ StatusRobot is an open-source, self-hosted uptime monitoring application for web
 - Optionally ask OpenAI for incident explanations and possible checks to try.
 - Sign in with email and password, GitHub or Discord.
 - Invite existing accounts to share your monitors with Viewer or Editor access.
+- Schedule maintenance for selected monitors through the API.
 
 The frontend uses React, TypeScript and Tailwind CSS. The backend uses Java and Spring Boot, with MySQL for accounts and configuration and MongoDB for monitoring history.
 
-Maintenance is a sidebar placeholder for now.
+Maintenance has a backend API. Its dashboard tab is still a placeholder.
 
 ## Requirements
 
@@ -141,6 +142,58 @@ The owner can cancel pending invitations, change roles or remove members. Invite
 Team memberships are stored in the MySQL `team_members` table. Hibernate creates it on backend startup with the existing schema update setting. Back up your database before upgrading and make sure the database account can create tables and foreign keys. Restart the backend after installing this change.
 
 The code uses one membership record per owner and member. `accepted` controls whether the invitation gives access. `TeamService.requireAccess()` reads the saved membership and role before shared monitor requests. The frontend hides editing controls for viewers, but the backend still checks permissions. Short comments explain the acceptance check, the invitation lock and why integration choices use the monitor owner's ID.
+
+## Maintenance
+
+The maintenance API schedules one-off work for between 1 and 30 monitors from your account. Only the owner can manage it. Team members cannot schedule work for another owner's monitors, even with Editor access.
+
+Each window has a title, optional description, start time, end time and selected monitors. New windows must start in the future and end after they start. Use ISO 8601 timestamps with a timezone, such as `2030-01-01T10:00:00Z`. The backend stores the times in UTC.
+
+The status is calculated from the saved dates:
+
+| Status | Meaning |
+| --- | --- |
+| `SCHEDULED` | The start time has not arrived. |
+| `IN_PROGRESS` | The start time has arrived, but the end time has not. |
+| `COMPLETED` | The end time has arrived. |
+| `CANCELLED` | The owner cancelled it. |
+
+The normal monitor scheduler skips automatic checks during active maintenance. It does not change the monitor's saved status or its manual pause setting. Skipped checks create no check logs, new automatic incidents or Discord alerts. Checks already running are not interrupted. Existing incidents remain open until a successful check confirms recovery.
+
+Checks resume on the next normal polling cycle when due, after the window ends or is cancelled. If windows overlap, checks stay skipped while any of them is active. A manually paused monitor stays paused. There is no separate maintenance background job, and schedules still work after a backend restart.
+
+Upcoming windows can be edited. Ongoing windows can be cancelled, but cannot be rescheduled or deleted directly. Cancel first if you need to delete one. Completed and cancelled windows stay in the owner's history until deleted. Deleting a maintenance window does not delete its monitors or check history.
+
+Notices are private unless `published` is true. Public status page responses include a `maintenance` list for published windows belonging to the page owner and covering its selected monitors. The list includes up to 40 upcoming or ongoing windows, ordered by start time. Published cancellations remain in this list until their original end time. Completed windows only appear in the private history. The frontend does not display these notices yet. Do not put secrets in a published title or description.
+
+The endpoints below require a signed-in session. POST, PUT, PATCH and DELETE also need the existing CSRF token.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/maintenance/mine?page=0` | List your windows, 20 per page. |
+| GET | `/api/maintenance/{id}` | Read one of your windows. |
+| POST | `/api/maintenance` | Create a window. |
+| PUT | `/api/maintenance/{id}` | Edit an upcoming window. |
+| PATCH | `/api/maintenance/{id}/cancel` | Cancel an upcoming or ongoing window. |
+| PATCH | `/api/maintenance/{id}/publication` | Publish or hide a notice using `{"published":true}` or `{"published":false}`. |
+| DELETE | `/api/maintenance/{id}` | Delete a window that is not ongoing. |
+
+Example POST body. Replace the IDs with your own monitors and choose future dates:
+
+```json
+{
+  "title": "Database update",
+  "description": "The website and API may be unavailable during this work.",
+  "startsAt": "2030-01-01T10:00:00Z",
+  "endsAt": "2030-01-01T11:00:00Z",
+  "monitorIds": [1, 2],
+  "published": false
+}
+```
+
+`Maintenance` stores the schedule. `MaintenanceRepository` reads and writes it. `MaintenanceService` checks ownership, dates and selected monitors. `MaintenanceController` exposes the API. `PingScheduler` checks `isActive()` before starting a monitor check. Short comments explain the date-based status, concurrent updates and monitor deletion links.
+
+The MySQL tables are `maintenance_windows` and `maintenance_monitors`. Hibernate creates them on backend startup with the existing schema update setting. Back up the database before upgrading and make sure its account can create tables, indexes and foreign keys. Restart the backend after installing this change. Deleting a monitor removes its maintenance links. If an unfinished window loses its last monitor, it is cancelled automatically. Completed history is kept.
 
 ## Incidents
 
