@@ -15,6 +15,7 @@ import com.djmahirnationtv.status.backend.integration.IntegrationService;
 import com.djmahirnationtv.status.backend.statuspage.StatusPageRepository;
 import com.djmahirnationtv.status.backend.incident.IncidentRepository;
 import com.djmahirnationtv.status.backend.team.TeamService;
+import com.djmahirnationtv.status.backend.maintenance.MaintenanceService;
 
 @Service
 public class MonitorService {
@@ -25,15 +26,17 @@ public class MonitorService {
     private final StatusPageRepository statusPages;
     private final IncidentRepository incidents;
     private final TeamService teams;
+    private final MaintenanceService maintenance;
 
     public MonitorService(MonitorRepository monitorRepository, PingLogRepository pingLogRepository, IntegrationService integrations,
-                          StatusPageRepository statusPages, IncidentRepository incidents, TeamService teams) {
+                          StatusPageRepository statusPages, IncidentRepository incidents, TeamService teams, MaintenanceService maintenance) {
         this.monitorRepository = monitorRepository;
         this.pingLogRepository = pingLogRepository;
         this.integrations = integrations;
         this.statusPages = statusPages;
         this.incidents = incidents;
         this.teams = teams;
+        this.maintenance = maintenance;
     }
 
     public List<MonitorResponse> getAllMonitors() {
@@ -124,6 +127,7 @@ public class MonitorService {
             page.getMonitors().removeIf(monitor -> monitor.getId().equals(id));
         }
         statusPages.flush();
+        maintenance.removeMonitor(id);
         incidents.deleteByMonitorId(id);
         monitorRepository.deleteById(id);
         pingLogRepository.deleteByMonitorId(id); // deletes the logs from mongodb (using id)
