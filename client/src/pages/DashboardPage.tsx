@@ -19,6 +19,8 @@ import { StatusPagesDashboard } from './StatusPagesDashboard'
 import { IncidentsPage, IncidentDetailsPage } from './IncidentsPage'
 import { IncidentEditorPage } from './IncidentEditorPage'
 import { TeamMembersPage } from './TeamMembersPage'
+import { MaintenancePage } from './MaintenancePage'
+import { MaintenanceEditorPage } from './MaintenanceEditorPage'
 
 interface DashboardPageProps {
   user: AuthUser | null
@@ -31,7 +33,7 @@ const navigation = [
   { icon: Activity, label: 'Monitoring', href: '#dashboard/monitoring/' },
   { icon: ShieldAlert, label: 'Incidents', href: '#dashboard/incidents/' },
   { icon: Radio, label: 'Status pages', href: '#dashboard/status-pages/' },
-  { icon: Wrench, label: 'Maintenance' },
+  { icon: Wrench, label: 'Maintenance', href: '#dashboard/maintenance/' },
   { icon: Users, label: 'Team members', href: '#dashboard/team-members/' },
   { icon: Cable, label: 'Integrations & API', href: '#dashboard/integrations/' }
 ]
@@ -68,6 +70,9 @@ export function DashboardPage({
   const integrations = path === '#dashboard/integrations'
   const statusPages = path === '#dashboard/status-pages'
   const teamMembers = path === '#dashboard/team-members'
+  const newMaintenance = ['#dashboard/maintenance/new', '#dashboard/maintenance/create'].includes(path)
+  const maintenanceEdit = path.match(/^#dashboard\/maintenance\/(\d+)\/edit$/)
+  const maintenance = path === '#dashboard/maintenance' || newMaintenance || Boolean(maintenanceEdit)
   const requestedWorkspace = Number(new URLSearchParams(query).get('workspace'))
   const workspaceId = Number.isSafeInteger(requestedWorkspace) && requestedWorkspace > 0 ? requestedWorkspace : null
   const incidentDetail = path.match(/^#dashboard\/incidents\/(\d+)$/)
@@ -82,6 +87,7 @@ export function DashboardPage({
   const activeHref = integrations ? '#dashboard/integrations/'
     : statusPages ? '#dashboard/status-pages/'
     : teamMembers ? '#dashboard/team-members/'
+    : maintenance ? '#dashboard/maintenance/'
     : incidents ? '#dashboard/incidents/'
     : listing || newMonitor || edit ? '#dashboard/monitoring/' : null
 
@@ -136,7 +142,6 @@ export function DashboardPage({
           onClick={() => setMenuOpen(false)}
         >
           {navigation.map(({ icon: Icon, label, href }) =>
-            href ? (
               <a
                 key={label}
                 href={href}
@@ -146,19 +151,6 @@ export function DashboardPage({
                 <Icon size={18} />
                 {label}
               </a>
-            ) : (
-              <button
-                key={label}
-                type="button"
-                disabled
-                title="Coming later"
-                className="sidebar-link w-full cursor-not-allowed text-muted/60"
-              >
-                <Icon size={18} />
-                <span>{label}</span>
-                <span className="sr-only"> (coming later)</span>
-              </button>
-            )
           )}
         </nav>
         <div className="mt-8 border-t border-line pt-5 lg:mt-auto">
@@ -200,6 +192,10 @@ export function DashboardPage({
             <StatusPagesDashboard key={user.id} />
           ) : teamMembers ? (
             <TeamMembersPage key={user.id} />
+          ) : maintenance ? (
+            newMaintenance || maintenanceEdit
+              ? <MaintenanceEditorPage key={`${user.id}-${path}`} maintenanceId={maintenanceEdit ? Number(maintenanceEdit[1]) : null} />
+              : <MaintenancePage key={user.id} />
           ) : incidents ? (
             newIncident ? <IncidentEditorPage key={user.id} />
               : incidentDetail ? <IncidentDetailsPage key={`${user.id}-${path}`} incidentId={Number(incidentDetail[1])} />

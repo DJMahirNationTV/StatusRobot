@@ -14,11 +14,9 @@ StatusRobot is an open-source, self-hosted uptime monitoring application for web
 - Optionally ask OpenAI for incident explanations and possible checks to try.
 - Sign in with email and password, GitHub or Discord.
 - Invite existing accounts to share your monitors with Viewer or Editor access.
-- Schedule maintenance for selected monitors through the API.
+- Schedule maintenance for selected monitors from the dashboard.
 
 The frontend uses React, TypeScript and Tailwind CSS. The backend uses Java and Spring Boot, with MySQL for accounts and configuration and MongoDB for monitoring history.
-
-Maintenance has a backend API. Its dashboard tab is still a placeholder.
 
 ## Requirements
 
@@ -145,7 +143,9 @@ The code uses one membership record per owner and member. `accepted` controls wh
 
 ## Maintenance
 
-The maintenance API schedules one-off work for between 1 and 30 monitors from your account. Only the owner can manage it. Team members cannot schedule work for another owner's monitors, even with Editor access.
+Open **Maintenance** in the dashboard and choose **Schedule maintenance**. Enter a title, optional description, start and end times, then select between 1 and 30 monitors from your account. Times in the form and list use your browser's local timezone and are sent to the backend in UTC.
+
+Only the owner can manage these one-off schedules. Team members cannot schedule work for another owner's monitors, even with Editor access. The list shows 20 windows per page and refreshes every 30 seconds.
 
 Each window has a title, optional description, start time, end time and selected monitors. New windows must start in the future and end after they start. Use ISO 8601 timestamps with a timezone, such as `2030-01-01T10:00:00Z`. The backend stores the times in UTC.
 
@@ -162,9 +162,11 @@ The normal monitor scheduler skips automatic checks during active maintenance. I
 
 Checks resume on the next normal polling cycle when due, after the window ends or is cancelled. If windows overlap, checks stay skipped while any of them is active. A manually paused monitor stays paused. There is no separate maintenance background job, and schedules still work after a backend restart.
 
-Upcoming windows can be edited. Ongoing windows can be cancelled, but cannot be rescheduled or deleted directly. Cancel first if you need to delete one. Completed and cancelled windows stay in the owner's history until deleted. Deleting a maintenance window does not delete its monitors or check history.
+Upcoming windows can be edited. Ongoing windows can be cancelled, but cannot be rescheduled or deleted directly. Cancel first if you need to delete one. The dashboard asks for confirmation before cancelling or deleting. Completed and cancelled windows stay in the owner's history until deleted. Deleting a maintenance window does not delete its monitors or check history.
 
-Notices are private unless `published` is true. Public status page responses include a `maintenance` list for published windows belonging to the page owner and covering its selected monitors. The list includes up to 40 upcoming or ongoing windows, ordered by start time. Published cancellations remain in this list until their original end time. Completed windows only appear in the private history. The frontend does not display these notices yet. Do not put secrets in a published title or description.
+Notices are private unless you check **Publish a status page notice**. Use **Publish notice** or **Hide notice** in the list to change this later. Public pages show the title, description, times and affected services for published windows belonging to the page owner and covering its selected monitors. Do not put secrets in a published title or description.
+
+Public pages include up to 40 upcoming or ongoing notices, ordered by start time. Published cancellations remain visible until their original end time. Completed windows only appear in the private history. Affected services show **Under maintenance** during an active published window, except manually paused monitors which still show **Paused**. Charts keep their real recorded history and do not add successful checks for skipped periods. Public pages refresh every 30 seconds.
 
 The endpoints below require a signed-in session. POST, PUT, PATCH and DELETE also need the existing CSRF token.
 

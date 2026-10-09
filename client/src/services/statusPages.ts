@@ -2,6 +2,7 @@ import { API_BASE } from './api'
 import { csrfHeaders } from './auth'
 import type { Monitor } from '../types/monitor'
 import type { PublicIncident } from './incidents'
+import type { PublicMaintenance } from './maintenance'
 
 export interface StatusPageData {
   id: number
@@ -11,6 +12,7 @@ export interface StatusPageData {
   pinnedDefault: boolean
   monitors: Monitor[]
   incidents: PublicIncident[]
+  maintenance: PublicMaintenance[]
 }
 export interface StatusPageInput {
   name: string
