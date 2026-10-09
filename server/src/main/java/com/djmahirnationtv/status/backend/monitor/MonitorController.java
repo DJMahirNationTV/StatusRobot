@@ -10,6 +10,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import jakarta.validation.Valid;
 import java.util.List;
+import com.djmahirnationtv.status.backend.integration.IntegrationService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/monitors")
@@ -27,8 +30,16 @@ public class MonitorController {
     }
 
     @GetMapping("/mine")
-    public List<MonitorResponse> listMine(Authentication authentication) {
-        return monitorService.getOwnedMonitors(Long.valueOf(authentication.getName()));
+    public List<MonitorResponse> listMine(Authentication authentication, @RequestParam(required = false) Long workspaceId) {
+        Long userId = Long.valueOf(authentication.getName());
+        return monitorService.getWorkspaceMonitors(workspaceId == null ? userId : workspaceId, userId);
+    }
+
+    @GetMapping("/workspace/integrations")
+    public IntegrationService.Listing workspaceIntegrations(Authentication authentication,
+                                                           @RequestParam(required = false) Long workspaceId) {
+        Long userId = Long.valueOf(authentication.getName());
+        return monitorService.getWorkspaceIntegrations(workspaceId == null ? userId : workspaceId, userId);
     }
 
     @GetMapping("/{id}")
@@ -38,8 +49,10 @@ public class MonitorController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public MonitorResponse create(@Valid @RequestBody MonitorRequest request, Authentication authentication) {
-        return monitorService.createMonitor(request, Long.valueOf(authentication.getName()));
+    public MonitorResponse create(@Valid @RequestBody MonitorRequest request, Authentication authentication,
+                                  @RequestParam(required = false) Long workspaceId) {
+        Long userId = Long.valueOf(authentication.getName());
+        return monitorService.createMonitor(request, workspaceId == null ? userId : workspaceId, userId);
     }
 
     @PutMapping("/{id}")
@@ -57,6 +70,11 @@ public class MonitorController {
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, String> concurrentChange() {
         return Map.of("message", "This monitor changed during your request. Please try again.");
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, String>> failed(ResponseStatusException exception) {
+        return ResponseEntity.status(exception.getStatusCode()).body(Map.of("message", exception.getReason()));
     }
 
     @PatchMapping("/{id}/toggle-pause")

@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
     "com.djmahirnationtv.status.backend.integration",
     "com.djmahirnationtv.status.backend.statuspage",
     "com.djmahirnationtv.status.backend.incident",
+    "com.djmahirnationtv.status.backend.team",
 })
 public class JpaConfig {
 }

@@ -11,8 +11,11 @@ import {
 } from 'lucide-react'
 import { monitorApi } from '../services/monitors'
 import type { Monitor } from '../types/monitor'
+import { teamApi } from '../services/teams'
+import type { Workspace } from '../services/teams'
+import { MonitorHistoryPanel } from '../components/MonitorHistoryPanel'
 
-export function MonitoringPage() {
+export function MonitoringPage({ workspaceId }: { workspaceId: number | null }) {
   const [monitors, setMonitors] = useState<Monitor[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -21,13 +24,21 @@ export function MonitoringPage() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [historyId, setHistoryId] = useState<number | null>(null)
+  const [historyRefresh, setHistoryRefresh] = useState(0)
+  const workspace = workspaces.find(item => workspaceId === null ? item.role === 'OWNER' : item.id === workspaceId)
+  const canEdit = workspace?.role === 'OWNER' || workspace?.role === 'EDITOR'
+  const workspaceQuery = workspaceId === null ? '' : `?workspace=${workspaceId}`
 
   useEffect(() => {
     let active = true
-    monitorApi
-      .list()
-      .then((list) => {
-        if (active) setMonitors(list)
+    Promise.all([monitorApi.list(workspaceId), teamApi.list()])
+      .then(([list, team]) => {
+        if (active) {
+          setMonitors(list)
+          setWorkspaces(team.workspaces)
+        }
       })
       .catch((exception) => {
         if (active) setError(exception.message)
@@ -38,14 +49,21 @@ export function MonitoringPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [workspaceId])
 
   async function refresh() {
     setLoading(true)
     setError('')
     try {
-      setMonitors(await monitorApi.list())
+      const [list, team] = await Promise.all([monitorApi.list(workspaceId), teamApi.list()])
+      setMonitors(list)
+      setWorkspaces(team.workspaces)
+      setHistoryRefresh(value => value + 1)
     } catch (exception) {
+      setMonitors([])
+      setWorkspaces([])
+      setDeleting(null)
+      setHistoryId(null)
       setError(message(exception))
     } finally {
       setLoading(false)
@@ -108,17 +126,29 @@ export function MonitoringPage() {
             Monitors<span className="text-green">.</span>
           </h1>
         </div>
-        <a
-          href="#dashboard/monitoring/new/"
+        {canEdit && <a
+          href={`#dashboard/monitoring/new/${workspaceQuery}`}
           className="button button-green px-4 py-2.5"
         >
           <Plus size={17} />
           New monitor
-        </a>
+        </a>}
       </header>
+      {workspaces.length > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <label className="text-xs text-muted">Workspace
+            <select value={workspace?.id ?? ''} onChange={event => { window.location.hash = `#dashboard/monitoring/?workspace=${event.target.value}` }}
+              className="form-input mt-2 sm:ml-3 sm:mt-0 sm:inline-block sm:w-auto">
+              {workspaces.map(item => <option key={item.id} value={item.id}>{item.role === 'OWNER' ? 'My monitors' : item.email}</option>)}
+            </select>
+          </label>
+          {workspace && workspace.role !== 'OWNER' && <span className="rounded-lg bg-sage px-3 py-2 text-xs text-green">{workspace.role === 'EDITOR' ? 'Editor access' : 'Viewer access'}</span>}
+        </div>
+      )}
       {error && (
         <p role="alert" className="dashboard-error mb-5">
           {error}
+          {workspaceId !== null && <a href="#dashboard/monitoring/" className="ml-3 underline">Back to my monitors</a>}
         </p>
       )}
       {notice && (
@@ -190,19 +220,19 @@ export function MonitoringPage() {
                   <Activity size={25} />
                 </span>
                 <h2 className="font-heading text-lg font-bold">
-                  Your first monitor starts here.
+                  {canEdit ? 'Your first monitor starts here.' : 'No monitors yet.'}
                 </h2>
                 <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted">
-                  Add a website or API endpoint. We will check its availability
-                  and keep you informed.
+                  {canEdit ? 'Add a website or API endpoint. We will check its availability and keep you informed.'
+                    : 'The owner or an editor can add monitors to this workspace.'}
                 </p>
-                <a
-                  href="#dashboard/monitoring/new/"
+                {canEdit && <a
+                  href={`#dashboard/monitoring/new/${workspaceQuery}`}
                   className="button button-green mt-6 px-5 py-3"
                 >
                   <Plus size={16} />
                   Create monitor
-                </a>
+                </a>}
               </div>
             )}
             {!loading && monitors.length > 0 && matching.length === 0 && (
@@ -241,12 +271,12 @@ export function MonitoringPage() {
                         className={`mt-1.5 size-2.5 shrink-0 rounded-full bg-current ${color}`}
                       />
                       <div className="min-w-0 flex-1">
-                        <a
-                          href={`#dashboard/monitoring/${monitor.id}/edit/`}
+                        {canEdit ? <a
+                          href={`#dashboard/monitoring/${monitor.id}/edit/${workspaceQuery}`}
                           className="break-words text-sm font-semibold hover:text-green"
                         >
                           {monitor.name}
-                        </a>
+                        </a> : <h2 className="break-words text-sm font-semibold">{monitor.name}</h2>}
                         <p className="mt-1 break-all text-xs text-muted">
                           {monitor.url}
                         </p>
@@ -268,8 +298,12 @@ export function MonitoringPage() {
                         </p>
                       </div>
                       <div className="flex gap-1.5">
+                        <button className="dashboard-action" onClick={() => setHistoryId(historyId === monitor.id ? null : monitor.id)} aria-expanded={historyId === monitor.id}>
+                          History<span className="sr-only"> for {monitor.name}</span>
+                        </button>
+                        {canEdit && <>
                         <a
-                          href={`#dashboard/monitoring/${monitor.id}/edit/`}
+                          href={`#dashboard/monitoring/${monitor.id}/edit/${workspaceQuery}`}
                           className="dashboard-action"
                           aria-label={`Edit ${monitor.name}`}
                         >
@@ -291,9 +325,11 @@ export function MonitoringPage() {
                         >
                           <Trash2 size={14} />
                         </button>
+                        </>}
                       </div>
                     </div>
-                    {deleting === monitor.id && (
+                    {historyId === monitor.id && <MonitorHistoryPanel monitorId={monitor.id} refresh={historyRefresh} />}
+                    {canEdit && deleting === monitor.id && (
                       <div
                         role="group"
                         aria-label={`Delete ${monitor.name}`}
@@ -327,7 +363,7 @@ export function MonitoringPage() {
             </div>
           </div>
           <p className="mt-4 text-xs text-muted">
-            Only your monitors appear here. Refresh to load the latest checks.
+            {workspace?.role === 'OWNER' ? 'Your monitors appear here.' : 'These monitors belong to the selected workspace.'} Refresh to load the latest checks.
           </p>
         </section>
         <aside className="space-y-4">
@@ -363,14 +399,16 @@ export function MonitoringPage() {
           <section className="dashboard-panel p-5">
             <h2 className="text-sm font-semibold">Stay in the loop.</h2>
             <p className="mt-3 text-xs leading-6 text-muted">
-              Send outage and recovery alerts straight to your Discord channel.
+              {workspace?.role === 'OWNER'
+                ? 'Send outage and recovery alerts straight to your Discord channel.'
+                : 'The workspace owner manages Discord integrations. Editors can select them when editing a monitor.'}
             </p>
-            <a
+            {workspace?.role === 'OWNER' && <a
               href="#dashboard/integrations/"
               className="mt-4 inline-block text-xs font-semibold text-green hover:underline"
             >
               Manage integrations
-            </a>
+            </a>}
           </section>
         </aside>
       </div>

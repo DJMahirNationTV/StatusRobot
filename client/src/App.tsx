@@ -46,7 +46,7 @@ function App() {
   }, [hash])
 
   if (route === '#dashboard' || route.startsWith('#dashboard/')) {
-    return <DashboardPage user={user} loading={loading} error={authError} route={route} />
+    return <DashboardPage user={user} loading={loading} error={authError} route={route} query={query} />
   }
 
   return (

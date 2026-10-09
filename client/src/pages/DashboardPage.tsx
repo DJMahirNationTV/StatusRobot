@@ -18,19 +18,21 @@ import { IntegrationsPage } from './IntegrationsPage'
 import { StatusPagesDashboard } from './StatusPagesDashboard'
 import { IncidentsPage, IncidentDetailsPage } from './IncidentsPage'
 import { IncidentEditorPage } from './IncidentEditorPage'
+import { TeamMembersPage } from './TeamMembersPage'
 
 interface DashboardPageProps {
   user: AuthUser | null
   loading: boolean
   error: string
   route: string
+  query: string
 }
 const navigation = [
   { icon: Activity, label: 'Monitoring', href: '#dashboard/monitoring/' },
   { icon: ShieldAlert, label: 'Incidents', href: '#dashboard/incidents/' },
   { icon: Radio, label: 'Status pages', href: '#dashboard/status-pages/' },
   { icon: Wrench, label: 'Maintenance' },
-  { icon: Users, label: 'Team members' },
+  { icon: Users, label: 'Team members', href: '#dashboard/team-members/' },
   { icon: Cable, label: 'Integrations & API', href: '#dashboard/integrations/' }
 ]
 
@@ -38,7 +40,8 @@ export function DashboardPage({
   user,
   loading,
   error,
-  route
+  route,
+  query
 }: DashboardPageProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   if (loading || !user)
@@ -64,6 +67,9 @@ export function DashboardPage({
   const path = route.replace(/\/$/, '')
   const integrations = path === '#dashboard/integrations'
   const statusPages = path === '#dashboard/status-pages'
+  const teamMembers = path === '#dashboard/team-members'
+  const requestedWorkspace = Number(new URLSearchParams(query).get('workspace'))
+  const workspaceId = Number.isSafeInteger(requestedWorkspace) && requestedWorkspace > 0 ? requestedWorkspace : null
   const incidentDetail = path.match(/^#dashboard\/incidents\/(\d+)$/)
   const newIncident = ['#dashboard/incidents/new', '#dashboard/incidents/create'].includes(path)
   const incidents = path === '#dashboard/incidents' || Boolean(incidentDetail) || newIncident
@@ -75,6 +81,7 @@ export function DashboardPage({
   const listing = ['#dashboard', '#dashboard/monitoring'].includes(path)
   const activeHref = integrations ? '#dashboard/integrations/'
     : statusPages ? '#dashboard/status-pages/'
+    : teamMembers ? '#dashboard/team-members/'
     : incidents ? '#dashboard/incidents/'
     : listing || newMonitor || edit ? '#dashboard/monitoring/' : null
 
@@ -191,17 +198,20 @@ export function DashboardPage({
             <IntegrationsPage key={user.id} />
           ) : statusPages ? (
             <StatusPagesDashboard key={user.id} />
+          ) : teamMembers ? (
+            <TeamMembersPage key={user.id} />
           ) : incidents ? (
             newIncident ? <IncidentEditorPage key={user.id} />
               : incidentDetail ? <IncidentDetailsPage key={`${user.id}-${path}`} incidentId={Number(incidentDetail[1])} />
               : <IncidentsPage key={user.id} />
           ) : newMonitor || edit ? (
             <MonitorEditorPage
-              key={`${user.id}-${path}`}
+              key={`${user.id}-${path}-${workspaceId}`}
               monitorId={edit ? Number(edit[1]) : null}
+              workspaceId={workspaceId}
             />
           ) : listing ? (
-            <MonitoringPage key={user.id} />
+            <MonitoringPage key={`${user.id}-${workspaceId}`} workspaceId={workspaceId} />
           ) : (
             <>
               <h1 className="dashboard-heading">Page not found.</h1>

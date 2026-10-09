@@ -14,6 +14,7 @@ import java.util.List;
 import com.djmahirnationtv.status.backend.integration.IntegrationService;
 import com.djmahirnationtv.status.backend.statuspage.StatusPageRepository;
 import com.djmahirnationtv.status.backend.incident.IncidentRepository;
+import com.djmahirnationtv.status.backend.team.TeamService;
 
 @Service
 public class MonitorService {
@@ -23,14 +24,16 @@ public class MonitorService {
     private final IntegrationService integrations;
     private final StatusPageRepository statusPages;
     private final IncidentRepository incidents;
+    private final TeamService teams;
 
     public MonitorService(MonitorRepository monitorRepository, PingLogRepository pingLogRepository, IntegrationService integrations,
-                          StatusPageRepository statusPages, IncidentRepository incidents) {
+                          StatusPageRepository statusPages, IncidentRepository incidents, TeamService teams) {
         this.monitorRepository = monitorRepository;
         this.pingLogRepository = pingLogRepository;
         this.integrations = integrations;
         this.statusPages = statusPages;
         this.incidents = incidents;
+        this.teams = teams;
     }
 
     public List<MonitorResponse> getAllMonitors() {
@@ -47,6 +50,12 @@ public class MonitorService {
 
     @Transactional
     public MonitorResponse createMonitor(MonitorRequest req, Long ownerId) {
+        return createMonitor(req, ownerId, ownerId);
+    }
+
+    @Transactional
+    public MonitorResponse createMonitor(MonitorRequest req, Long ownerId, Long userId) {
+        teams.requireAccess(ownerId, userId, true);
         Monitor monitor = new Monitor(
             req.name().strip(),
             req.url().strip(),
@@ -65,9 +74,19 @@ public class MonitorService {
                 .map(MonitorResponse::from).toList();
     }
 
+    public List<MonitorResponse> getWorkspaceMonitors(Long ownerId, Long userId) {
+        teams.requireAccess(ownerId, userId, false);
+        return getOwnedMonitors(ownerId);
+    }
+
+    public IntegrationService.Listing getWorkspaceIntegrations(Long ownerId, Long userId) {
+        teams.requireAccess(ownerId, userId, true);
+        return integrations.list(ownerId);
+    }
+
     @Transactional
-    public MonitorResponse updateMonitor(Long id, MonitorRequest req, Long ownerId) {
-        Monitor monitor = ownedMonitor(id, ownerId);
+    public MonitorResponse updateMonitor(Long id, MonitorRequest req, Long userId) {
+        Monitor monitor = editableMonitor(id, userId);
         boolean targetChanged = !monitor.getUrl().equals(req.url()) || !monitor.getHttpMethod().equals(req.httpMethod());
         monitor.setName(req.name().strip());
         monitor.setUrl(req.url().strip());
@@ -75,7 +94,8 @@ public class MonitorService {
         monitor.setIntervalSeconds(req.intervalSeconds());
         monitor.setTimeoutSeconds(req.timeoutSeconds());
         if (req.integrationIds() != null) {
-            var selected = integrations.selection(req.integrationIds(), ownerId);
+            // Integrations belong to the monitor owner, not the teammate editing it.
+            var selected = integrations.selection(req.integrationIds(), monitor.getOwnerId());
             monitor.getIntegrations().clear();
             monitor.getIntegrations().addAll(selected);
         }
@@ -84,8 +104,8 @@ public class MonitorService {
     }
 
     @Transactional
-    public MonitorResponse togglePause(Long id, Long ownerId) {
-        Monitor monitor = ownedMonitor(id, ownerId);
+    public MonitorResponse togglePause(Long id, Long userId) {
+        Monitor monitor = editableMonitor(id, userId);
 
         if (monitor.getStatus() == MonitorStatus.PAUSED) {
             monitor.setStatus(MonitorStatus.UP);
@@ -98,8 +118,8 @@ public class MonitorService {
     }
 
     @Transactional
-    public void deleteMonitor(Long id, Long ownerId) {
-        ownedMonitor(id, ownerId);
+    public void deleteMonitor(Long id, Long userId) {
+        editableMonitor(id, userId);
         for (var page : statusPages.findByMonitorsId(id)) {
             page.getMonitors().removeIf(monitor -> monitor.getId().equals(id));
         }
@@ -110,14 +130,18 @@ public class MonitorService {
     }
 
     @Transactional(readOnly = true)
-    public List<Long> getIntegrationIds(Long id, Long ownerId) {
-        return ownedMonitor(id, ownerId).getIntegrations().stream().map(item -> item.getId()).sorted().toList();
+    public List<Long> getIntegrationIds(Long id, Long userId) {
+        return editableMonitor(id, userId).getIntegrations().stream().map(item -> item.getId()).sorted().toList();
     }
 
-    private Monitor ownedMonitor(Long id, Long ownerId) {
-        return monitorRepository.findById(id)
-                .filter(monitor -> ownerId.equals(monitor.getOwnerId()))
+    private Monitor editableMonitor(Long id, Long userId) {
+        Monitor monitor = monitorRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Monitor not found"));
+        if (monitor.getOwnerId() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Monitor not found");
+        }
+        teams.requireAccess(monitor.getOwnerId(), userId, true);
+        return monitor;
     }
 
 }

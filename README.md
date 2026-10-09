@@ -13,10 +13,11 @@ StatusRobot is an open-source, self-hosted uptime monitoring application for web
 - Publish selected incidents on the status pages that include the affected monitor.
 - Optionally ask OpenAI for incident explanations and possible checks to try.
 - Sign in with email and password, GitHub or Discord.
+- Invite existing accounts to share your monitors with Viewer or Editor access.
 
 The frontend uses React, TypeScript and Tailwind CSS. The backend uses Java and Spring Boot, with MySQL for accounts and configuration and MongoDB for monitoring history.
 
-Maintenance and team management are sidebar placeholders for now.
+Maintenance is a sidebar placeholder for now.
 
 ## Requirements
 
@@ -120,6 +121,26 @@ Use the Monitoring tab to add an HTTP or HTTPS monitor. Add a Discord webhook un
 Under Status Pages, create a page and select the monitors you want to publish. Public pages are available at `/#status/your-page-slug`.
 
 Only the server owner can use **Pin Default**. Set `STATUS_PAGE_OWNER_EMAIL` to that account's email before starting the backend. If it is not set, the earliest registered account is treated as the owner. Only one page can be the default at a time; unpinning it restores the landing page.
+
+## Team members
+
+Open **Team members** in your dashboard and invite an existing account by email. Choose Viewer or Editor. The invitation appears in that person's Team members tab. No email is sent and no access is granted until they accept.
+
+| Role | Access |
+| --- | --- |
+| Owner | Manages their monitors, sends invitations, changes roles and removes members. |
+| Viewer | Browses the owner's monitors and check history. Cannot change monitors. |
+| Editor | Creates, edits, pauses and deletes the owner's monitors. Can select the owner's existing Discord channels for alerts. |
+
+After accepting an invitation, use the workspace picker in **Monitoring** to switch between your own monitors and shared ones. You can belong to several workspaces. Sharing includes all current and future monitors owned by that account. New monitors created in a shared workspace belong to its owner, not the editor.
+
+Editors can delete monitors and their history, so only give this role to people you trust. Status page and incident management, team management, account settings and integration management remain owner-only. Saved webhook URLs are never returned to teammates. Monitor details and check history still have the existing public read endpoints.
+
+The owner can cancel pending invitations, change roles or remove members. Invitees can decline, and accepted members can leave. Removal is checked on subsequent API requests. It does not delete an account or any monitors. A workspace allows up to 50 members including pending invitations.
+
+Team memberships are stored in the MySQL `team_members` table. Hibernate creates it on backend startup with the existing schema update setting. Back up your database before upgrading and make sure the database account can create tables and foreign keys. Restart the backend after installing this change.
+
+The code uses one membership record per owner and member. `accepted` controls whether the invitation gives access. `TeamService.requireAccess()` reads the saved membership and role before shared monitor requests. The frontend hides editing controls for viewers, but the backend still checks permissions. Short comments explain the acceptance check, the invitation lock and why integration choices use the monitor owner's ID.
 
 ## Incidents
 
