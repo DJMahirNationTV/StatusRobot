@@ -1,5 +1,4 @@
-import { http, requestError } from './api'
-import { csrfHeaders } from './auth'
+import { requestApi } from './requests'
 
 export type MaintenanceStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 export const maintenanceLabels: Record<MaintenanceStatus, string> = {
@@ -33,13 +32,8 @@ export interface MaintenanceListing {
   totalElements: number
 }
 
-async function request(path: string, method = 'GET', data?: unknown) {
-  const headers = method === 'GET' ? {} : await csrfHeaders()
-  try {
-    return await http.request({ url: `/maintenance${path}`, method, headers, data })
-  } catch (error) {
-    throw requestError(error, 'Could not save this change. Refresh and try again.', true)
-  }
+function request(path: string, method = 'GET', data?: unknown) {
+  return requestApi(`/maintenance${path}`, method, data, { fallback: 'Could not save this change. Refresh and try again.' })
 }
 
 export const maintenanceApi = {

@@ -1,5 +1,4 @@
-import { http, requestError } from './api'
-import { csrfHeaders } from './auth'
+import { requestApi } from './requests'
 
 export type TeamRole = 'VIEWER' | 'EDITOR'
 export interface TeamMember {
@@ -20,13 +19,8 @@ export interface TeamListing {
   invitations: { id: number; email: string; role: TeamRole }[]
 }
 
-async function request(path = '', method = 'GET', data?: { email?: string; role: TeamRole }) {
-  const headers = method === 'GET' ? {} : await csrfHeaders()
-  try {
-    return await http.request({ url: `/team-members${path}`, method, headers, data })
-  } catch (error) {
-    throw requestError(error, 'Could not update the team. Refresh and try again.', true)
-  }
+function request(path = '', method = 'GET', data?: { email?: string; role: TeamRole }) {
+  return requestApi(`/team-members${path}`, method, data, { fallback: 'Could not update the team. Refresh and try again.' })
 }
 
 export const teamApi = {

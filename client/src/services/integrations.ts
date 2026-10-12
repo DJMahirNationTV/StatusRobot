@@ -1,5 +1,4 @@
-import { http, requestError } from './api'
-import { csrfHeaders } from './auth'
+import { requestApi } from './requests'
 
 export interface Integration {
   id: number
@@ -10,17 +9,12 @@ export interface IntegrationListing {
   integrations: Integration[]
 }
 
-async function request(
+function request(
   path: string,
   method = 'GET',
   data?: { name: string; webhookUrl: string }
 ) {
-  const headers = method === 'GET' ? {} : await csrfHeaders()
-  try {
-    return await http.request({ url: `/integrations${path}`, method, headers, data })
-  } catch (error) {
-    throw requestError(error, 'Could not complete this request. Refresh and try again.', true)
-  }
+  return requestApi(`/integrations${path}`, method, data, { fallback: 'Could not complete this request. Refresh and try again.' })
 }
 
 export const integrationApi = {

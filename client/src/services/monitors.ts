@@ -1,19 +1,12 @@
-import axios from 'axios'
-import { http, requestError } from './api'
-import { csrfHeaders } from './auth'
+import { requestApi } from './requests'
 import type { Monitor, MonitorInput } from '../types/monitor'
 import type { IntegrationListing } from './integrations'
 
-async function request(path: string, method = 'GET', monitor?: MonitorInput) {
-  const headers = method === 'GET' ? {} : await csrfHeaders()
-  try {
-    return await http.request({ url: `/monitors${path}`, method, headers, data: monitor })
-  } catch (error) {
-    const fallback = axios.isAxiosError(error) && error.response?.status === 404
-      ? 'This monitor is no longer available. Refresh the list.'
-      : 'Could not save this change. Please try again.'
-    throw requestError(error, fallback, true)
-  }
+function request(path: string, method = 'GET', monitor?: MonitorInput) {
+  return requestApi(`/monitors${path}`, method, monitor, {
+    fallback: 'Could not save this change. Please try again.',
+    notFound: 'This monitor is no longer available. Refresh the list.',
+  })
 }
 
 export const monitorApi = {
