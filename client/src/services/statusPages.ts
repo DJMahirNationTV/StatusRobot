@@ -1,6 +1,4 @@
-import axios from 'axios'
-import { http, requestError } from './api'
-import { csrfHeaders } from './auth'
+import { requestApi } from './requests'
 import type { Monitor } from '../types/monitor'
 import type { PublicIncident } from './incidents'
 import type { PublicMaintenance } from './maintenance'
@@ -27,16 +25,8 @@ export interface StatusPageListing {
   pages: StatusPageData[]
 }
 
-async function request(path: string, method = 'GET', data?: unknown) {
-  const headers = method === 'GET' ? {} : await csrfHeaders()
-  try {
-    return await http.request({ url: `/status-pages${path}`, method, headers, data })
-  } catch (error) {
-    const fallback = axios.isAxiosError(error) && error.response?.status === 404
-      ? 'This status page was not found.'
-      : 'Could not complete this request. Please try again.'
-    throw requestError(error, fallback, true)
-  }
+function request(path: string, method = 'GET', data?: unknown) {
+  return requestApi(`/status-pages${path}`, method, data, { notFound: 'This status page was not found.' })
 }
 
 export const statusPageApi = {

@@ -4,8 +4,12 @@ import { maintenanceApi, maintenanceLabels } from '../services/maintenance'
 import type { Maintenance, MaintenanceListing } from '../services/maintenance'
 import { monitorApi } from '../services/monitors'
 import type { Monitor } from '../types/monitor'
+import { teamApi, findWorkspace, canEditWorkspace, workspaceQuery } from '../services/teams'
+import type { Workspace } from '../services/teams'
+import { WorkspacePicker } from '../components/WorkspacePicker'
+import { Pagination } from '../components/Pagination'
 
-export function MaintenancePage() {
+export function MaintenancePage({ workspaceId }: { workspaceId: number | null }) {
   const [result, setResult] = useState<MaintenanceListing | null>(null)
   const [monitors, setMonitors] = useState<Monitor[]>([])
   const [page, setPage] = useState(0)
@@ -15,6 +19,9 @@ export function MaintenancePage() {
   const [notice, setNotice] = useState('')
   const [confirm, setConfirm] = useState<{ window: Maintenance; action: 'cancel' | 'delete' } | null>(null)
   const confirmation = useRef<HTMLElement>(null)
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const canEdit = canEditWorkspace(findWorkspace(workspaces, workspaceId))
+  const query = workspaceQuery(workspaceId)
 
   useEffect(() => {
     // Bring the confirmation into view for long lists.
@@ -28,10 +35,21 @@ export function MaintenancePage() {
       if (pending) return
       pending = true
       try {
-        const [listing, owned] = await Promise.all([maintenanceApi.list(page), monitorApi.list()])
-        if (active) { setResult(listing); setMonitors(owned); setError('') }
+        const [listing, monitors, team] = await Promise.all([maintenanceApi.list(page, workspaceId), monitorApi.list(workspaceId), teamApi.list()])
+        if (active) {
+          setResult(listing)
+          setMonitors(monitors)
+          setWorkspaces(team.workspaces)
+          setError('')
+          if (!canEditWorkspace(findWorkspace(team.workspaces, workspaceId))) setConfirm(null)
+        }
       } catch (exception) {
-        if (active) setError(message(exception))
+        if (active) {
+          setError(message(exception))
+          setWorkspaces([])
+          setConfirm(null)
+          if (workspaceId !== null) { setResult(null); setMonitors([]) }
+        }
       } finally {
         pending = false
       }
@@ -39,7 +57,7 @@ export function MaintenancePage() {
     void load()
     const interval = window.setInterval(() => void load(), 30000)
     return () => { active = false; window.clearInterval(interval) }
-  }, [page, reload])
+  }, [page, reload, workspaceId])
 
   function refresh(nextPage = page) {
     setResult(null)
@@ -50,7 +68,7 @@ export function MaintenancePage() {
   }
 
   async function change(window: Maintenance, action: 'cancel' | 'delete' | 'publish') {
-    if (busy) return
+    if (busy || !canEdit) return
     setBusy(true)
     setError('')
     setNotice('')
@@ -65,6 +83,8 @@ export function MaintenancePage() {
       refresh(action === 'delete' && result?.maintenance.length === 1 && page > 0 ? page - 1 : page)
     } catch (exception) {
       setError(message(exception))
+      setWorkspaces([])
+      setConfirm(null)
     } finally {
       setBusy(false)
     }
@@ -81,10 +101,11 @@ export function MaintenancePage() {
           <p className="mt-3 text-sm text-muted">Schedule work without triggering outage alerts.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <a href="#dashboard/maintenance/new/" className="button button-green"><Plus size={16} />Schedule maintenance</a>
+          {canEdit && <a href={`#dashboard/maintenance/new/${query}`} className="button button-green"><Plus size={16} />Schedule maintenance</a>}
           <button disabled={loading || busy} onClick={() => refresh()} className="dashboard-action"><RefreshCw size={15} />Refresh</button>
         </div>
       </header>
+      <WorkspacePicker workspaces={workspaces} workspaceId={workspaceId} page="#dashboard/maintenance/" ownLabel="My maintenance" disabled={busy} />
       {error && <p role="alert" className="dashboard-error mb-5">{error}
         <button disabled={busy} onClick={() => refresh()} className="ml-3 underline">Try again</button>
       </p>}
@@ -116,8 +137,8 @@ export function MaintenancePage() {
               {result?.maintenance.map(item => <article key={item.id} aria-label={item.title} className="p-5 sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <h2 className="break-words text-sm font-semibold">{item.status === 'SCHEDULED'
-                      ? <a href={`#dashboard/maintenance/${item.id}/edit/`} className="hover:text-green">{item.title}</a> : item.title}</h2>
+                    <h2 className="break-words text-sm font-semibold">{canEdit && item.status === 'SCHEDULED'
+                      ? <a href={`#dashboard/maintenance/${item.id}/edit/${query}`} className="hover:text-green">{item.title}</a> : item.title}</h2>
                     <p className="mt-2 break-words text-xs text-muted">{item.monitorIds.length > 0
                       ? item.monitorIds.map(id => monitors.find(monitor => monitor.id === id)?.name || `Monitor #${id}`).join(', ')
                       : 'No monitors remain in this window.'}</p>
@@ -134,24 +155,20 @@ export function MaintenancePage() {
                 {item.description && <details className="mt-4 text-xs"><summary className="cursor-pointer text-muted">Description</summary>
                   <p className="mt-3 whitespace-pre-wrap break-words leading-6 text-muted">{item.description}</p>
                 </details>}
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {item.status === 'SCHEDULED' && <a href={`#dashboard/maintenance/${item.id}/edit/`} className="dashboard-action">Edit<span className="sr-only"> {item.title}</span></a>}
+                {canEdit && <div className="mt-5 flex flex-wrap gap-2">
+                  {item.status === 'SCHEDULED' && <a href={`#dashboard/maintenance/${item.id}/edit/${query}`} className="dashboard-action">Edit<span className="sr-only"> {item.title}</span></a>}
                   {item.status !== 'COMPLETED' && <button disabled={busy || loading || Boolean(error)} onClick={() => change(item, 'publish')} className="dashboard-action">
                     {item.published ? 'Hide notice' : 'Publish notice'}<span className="sr-only"> for {item.title}</span></button>}
                   {(item.status === 'SCHEDULED' || item.status === 'IN_PROGRESS') && <button disabled={busy || loading || Boolean(error)} onClick={() => setConfirm({ window: item, action: 'cancel' })} className="dashboard-action">
                     Cancel<span className="sr-only"> {item.title}</span></button>}
                   {item.status !== 'IN_PROGRESS' && <button disabled={busy || loading || Boolean(error)} onClick={() => setConfirm({ window: item, action: 'delete' })} className="dashboard-action text-rose-700">
                     Delete<span className="sr-only"> {item.title}</span></button>}
-                </div>
+                </div>}
               </article>)}
             </div>
           </div>
-          {result && result.totalPages > 1 && <nav aria-label="Maintenance pages" className="mt-4 flex items-center justify-between gap-3">
-            <button disabled={page === 0 || busy} onClick={() => refresh(page - 1)} className="dashboard-action">Previous</button>
-            <p className="text-xs text-muted">Page {page + 1} of {result.totalPages}</p>
-            <button disabled={page + 1 >= result.totalPages || busy} onClick={() => refresh(page + 1)} className="dashboard-action">Next</button>
-          </nav>}
-          <p className="mt-4 text-xs text-muted">Only your schedules appear here. Times use your local timezone. Updates every 30 seconds.</p>
+          {result && <Pagination label="Maintenance pages" page={page} totalPages={result.totalPages} onChange={refresh} disabled={busy} />}
+          <p className="mt-4 text-xs text-muted">Schedules from the selected workspace. Times use your local timezone. Updates every 30 seconds.</p>
         </section>
       </div>
     </>

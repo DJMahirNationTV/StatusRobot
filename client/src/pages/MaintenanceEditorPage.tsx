@@ -5,9 +5,11 @@ import { maintenanceApi } from '../services/maintenance'
 import type { Maintenance } from '../services/maintenance'
 import { monitorApi } from '../services/monitors'
 import type { Monitor } from '../types/monitor'
+import { teamApi, findWorkspace, canEditWorkspace, workspaceQuery } from '../services/teams'
 
-export function MaintenanceEditorPage({ maintenanceId }: { maintenanceId: number | null }) {
-  const [data, setData] = useState<{ maintenance: Maintenance | null; monitors: Monitor[] } | null>(null)
+export function MaintenanceEditorPage({ maintenanceId, workspaceId }: { maintenanceId: number | null; workspaceId: number | null }) {
+  const [data, setData] = useState<{ maintenance: Maintenance | null; monitors: Monitor[]; workspaceId: number | null } | null>(null)
+  const query = workspaceQuery(data ? data.workspaceId : workspaceId)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [startsAt, setStartsAt] = useState('')
@@ -20,20 +22,29 @@ export function MaintenanceEditorPage({ maintenanceId }: { maintenanceId: number
 
   useEffect(() => {
     let active = true
-    Promise.all([monitorApi.list(), maintenanceId === null ? Promise.resolve(null) : maintenanceApi.get(maintenanceId)])
-      .then(([monitors, maintenance]) => {
+    async function load() {
+      try {
+        const maintenance = maintenanceId === null ? null : await maintenanceApi.get(maintenanceId)
+        // Editing uses the saved workspace, even when someone changes the URL.
+        const selectedWorkspace = maintenance?.workspaceId ?? workspaceId
+        const [monitors, team] = await Promise.all([monitorApi.list(selectedWorkspace), teamApi.list()])
+        const workspace = findWorkspace(team.workspaces, selectedWorkspace)
+        if (!canEditWorkspace(workspace)) throw new Error('You need Editor access to manage maintenance in this workspace.')
         if (!active) return
-        setData({ maintenance, monitors })
+        setData({ maintenance, monitors, workspaceId: workspace?.role === 'OWNER' ? null : selectedWorkspace })
         setTitle(maintenance?.title ?? '')
         setDescription(maintenance?.description ?? '')
         setStartsAt(toLocalDateTime(maintenance?.startsAt ?? new Date(Date.now() + 3600000).toISOString()))
         setEndsAt(toLocalDateTime(maintenance?.endsAt ?? new Date(Date.now() + 7200000).toISOString()))
         setSelected(maintenance?.monitorIds ?? [])
         setPublished(maintenance?.published ?? false)
-      })
-      .catch(exception => { if (active) setError(exception.message) })
+      } catch (exception) {
+        if (active) setError(exception instanceof Error ? exception.message : 'Could not load maintenance.')
+      }
+    }
+    void load()
     return () => { active = false }
-  }, [maintenanceId, attempt])
+  }, [maintenanceId, workspaceId, attempt])
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -47,8 +58,8 @@ export function MaintenanceEditorPage({ maintenanceId }: { maintenanceId: number
       if (!title.trim()) throw new Error('Enter a maintenance title.')
       if (selected.length === 0 || selected.length > 30) throw new Error('Select between 1 and 30 monitors.')
       setBusy(true)
-      await maintenanceApi.save(maintenanceId, { title: title.trim(), description: description.trim(), startsAt: start, endsAt: end, monitorIds: selected, published })
-      window.location.hash = '#dashboard/maintenance/'
+      await maintenanceApi.save(maintenanceId, { title: title.trim(), description: description.trim(), startsAt: start, endsAt: end, monitorIds: selected, published }, data.workspaceId)
+      window.location.hash = `#dashboard/maintenance/${query}`
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Could not save maintenance.')
     } finally {
@@ -60,7 +71,7 @@ export function MaintenanceEditorPage({ maintenanceId }: { maintenanceId: number
 
   return (
     <div className="max-w-4xl">
-      <a href="#dashboard/maintenance/" className="dashboard-action mb-6"><ChevronLeft size={14} />Maintenance</a>
+      <a href={`#dashboard/maintenance/${query}`} className="dashboard-action mb-6"><ChevronLeft size={14} />Maintenance</a>
       <h1 className="dashboard-heading mb-7">{maintenanceId === null ? 'Schedule maintenance' : 'Edit maintenance'}<span className="text-green">.</span></h1>
       {error && <p role="alert" className="dashboard-error mb-5">{error}
         {!data && <button onClick={() => { setError(''); setAttempt(value => value + 1) }} className="ml-3 underline">Retry</button>}
@@ -68,11 +79,11 @@ export function MaintenanceEditorPage({ maintenanceId }: { maintenanceId: number
       {!data && !error && <p role="status" className="text-sm text-muted">Loading...</p>}
       {data && !editable && <div className="dashboard-panel p-6">
         <p className="text-sm">Only upcoming maintenance can be edited. You can cancel ongoing work from the maintenance list.</p>
-        <a href="#dashboard/maintenance/" className="dashboard-action mt-5">Back to maintenance</a>
+        <a href={`#dashboard/maintenance/${query}`} className="dashboard-action mt-5">Back to maintenance</a>
       </div>}
       {data && editable && data.monitors.length === 0 && <div className="dashboard-panel p-6">
         <p className="text-sm text-muted">Add a monitor before scheduling maintenance.</p>
-        <a href="#dashboard/monitoring/new/" className="button button-green mt-5">Add a monitor</a>
+        <a href={`#dashboard/monitoring/new/${query}`} className="button button-green mt-5">Add a monitor</a>
       </div>}
       {data && editable && data.monitors.length > 0 && <form onSubmit={save} className="space-y-6">
         <fieldset disabled={busy} className="dashboard-panel space-y-5 p-5 sm:p-7">
@@ -96,7 +107,7 @@ export function MaintenanceEditorPage({ maintenanceId }: { maintenanceId: number
         <fieldset disabled={busy} className="dashboard-panel p-5 sm:p-7">
           <legend className="sr-only">Affected monitors</legend>
           <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-sm font-semibold">Affected monitors</h2><p className="text-xs text-muted">{selected.length} of 30 selected</p></div>
-          <p className="mt-2 text-xs leading-6 text-muted">Only monitors from your own account can be selected.</p>
+          <p className="mt-2 text-xs leading-6 text-muted">Only monitors from this workspace can be selected.</p>
           <div className="mt-4 max-h-80 divide-y divide-line overflow-y-auto rounded-lg border border-line">
             {data.monitors.map(monitor => <label key={monitor.id} className="flex cursor-pointer items-start gap-3 p-4">
               <input type="checkbox" checked={selected.includes(monitor.id)} disabled={!selected.includes(monitor.id) && selected.length >= 30}
@@ -116,7 +127,7 @@ export function MaintenanceEditorPage({ maintenanceId }: { maintenanceId: number
         <p className="text-xs leading-6 text-muted">Automatic checks are skipped during this window and resume when it ends. Existing incidents stay open until recovery is confirmed. Manually paused monitors stay paused.</p>
         <div className="flex flex-wrap gap-3">
           <button disabled={busy} className="button button-green">{busy ? 'Saving...' : maintenanceId === null ? 'Schedule maintenance' : 'Save changes'}</button>
-          <a href="#dashboard/maintenance/" className="dashboard-action">Back to list</a>
+          <a href={`#dashboard/maintenance/${query}`} className="dashboard-action">Back to list</a>
         </div>
       </form>}
     </div>

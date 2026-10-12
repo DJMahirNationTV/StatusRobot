@@ -1,5 +1,4 @@
-import { http, requestError } from './api'
-import { csrfHeaders } from './auth'
+import { requestApi } from './requests'
 
 export type IncidentStage = 'INVESTIGATING' | 'IDENTIFIED' | 'MONITORING' | 'RESOLVED'
 export const stageLabels: Record<IncidentStage, string> = {
@@ -21,6 +20,7 @@ export interface PublicIncident {
 }
 
 export interface Incident extends PublicIncident {
+  workspaceId: number
   monitorName: string
   cause: string
   manual: boolean
@@ -37,21 +37,15 @@ export interface IncidentListing {
 }
 
 async function request(path: string, method = 'GET', data?: unknown) {
-  const headers = method === 'GET' ? {} : await csrfHeaders()
-  try {
-    const response = await http.request({
-      url: `/incidents${path}`, method, headers, data,
-      timeout: 30000, // Incident help can take longer than normal requests.
-    })
-    return response.data
-  } catch (error) {
-    throw requestError(error, 'Could not complete this request. Please try again.', true)
-  }
+  const response = await requestApi(`/incidents${path}`, method, data, { timeout: 30000 })
+  return response.data
 }
 
 export const incidentApi = {
-  list(status: IncidentFilter = 'all', page = 0): Promise<IncidentListing> {
-    return request(`?${new URLSearchParams({ status, page: String(page) })}`)
+  list(status: IncidentFilter = 'all', page = 0, workspaceId: number | null = null): Promise<IncidentListing> {
+    const params = new URLSearchParams({ status, page: String(page) })
+    if (workspaceId !== null) params.set('workspaceId', String(workspaceId))
+    return request(`?${params}`)
   },
   get(id: number): Promise<Incident> {
     return request(`/${id}`)

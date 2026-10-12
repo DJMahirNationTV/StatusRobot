@@ -3,21 +3,34 @@ import { ChevronLeft, Plus, RefreshCw, ShieldAlert } from 'lucide-react'
 import { incidentApi, stageLabels } from '../services/incidents'
 import type { Incident, IncidentFilter, IncidentListing, IncidentStage } from '../services/incidents'
 import { IncidentHelp } from '../components/IncidentHelp'
+import { WorkspacePicker } from '../components/WorkspacePicker'
+import { Pagination } from '../components/Pagination'
+import { teamApi, findWorkspace, canEditWorkspace, workspaceQuery } from '../services/teams'
+import type { Workspace } from '../services/teams'
 
-export function IncidentsPage() {
+export function IncidentsPage({ workspaceId }: { workspaceId: number | null }) {
   const [result, setResult] = useState<IncidentListing | null>(null)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState<IncidentFilter>('all')
   const [page, setPage] = useState(0)
   const [reload, setReload] = useState(0)
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const canEdit = canEditWorkspace(findWorkspace(workspaces, workspaceId))
+  const query = workspaceQuery(workspaceId)
 
   useEffect(() => {
     let active = true
-    incidentApi.list(filter, page)
-      .then(list => { if (active) setResult(list) })
-      .catch(exception => { if (active) setError(exception.message) })
+    Promise.all([incidentApi.list(filter, page, workspaceId), teamApi.list()])
+      .then(([list, team]) => { if (active) { setResult(list); setWorkspaces(team.workspaces); setError('') } })
+      .catch(exception => {
+        if (active) {
+          setError(exception.message)
+          setWorkspaces([])
+          if (workspaceId !== null) setResult(null)
+        }
+      })
     return () => { active = false }
-  }, [filter, page, reload])
+  }, [filter, page, reload, workspaceId])
 
   function refresh() {
     setResult(null)
@@ -40,12 +53,13 @@ export function IncidentsPage() {
           <p className="eyebrow mb-2">Monitoring history</p>
           <h1 className="dashboard-heading">Incidents<span className="text-green">.</span></h1>
         </div>
-        <div className="flex flex-wrap justify-end gap-2"><a href="#dashboard/incidents/new/" className="button button-green"><Plus size={15} />New incident</a>
+        <div className="flex flex-wrap justify-end gap-2">{canEdit && <a href={`#dashboard/incidents/new/${query}`} className="button button-green"><Plus size={15} />New incident</a>}
         <button type="button" onClick={refresh} disabled={loading} className="dashboard-action">
           <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           Refresh
         </button></div>
       </header>
+      <WorkspacePicker workspaces={workspaces} workspaceId={workspaceId} page="#dashboard/incidents/" ownLabel="My incidents" />
       {error && <p role="alert" className="dashboard-error mb-5">{error}</p>}
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_240px]">
         <section aria-label="Your incident history" className="min-w-0">
@@ -90,7 +104,7 @@ export function IncidentsPage() {
                     <span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${incident.resolvedAt ? 'bg-green' : 'bg-rose-600'}`} />
                     <div className="min-w-0 flex-1">
                       <h2 className="break-words text-sm font-semibold">
-                        <a href={`#dashboard/incidents/${incident.id}/`} className="hover:text-green">{incident.title}</a>
+                        <a href={`#dashboard/incidents/${incident.id}/${query}`} className="hover:text-green">{incident.title}</a>
                       </h2>
                       <p className="mt-1 text-xs text-muted">{incident.monitorName} | {incident.manual ? 'Manual incident' : incident.cause}</p>
                     </div>
@@ -119,14 +133,8 @@ export function IncidentsPage() {
             </div>
             {error && <div className="p-10 text-center"><button type="button" onClick={refresh} className="dashboard-action">Try again</button></div>}
           </div>
-          {result && result.totalPages > 1 && (
-            <nav aria-label="Incident pages" className="mt-4 flex items-center justify-between gap-3">
-              <button type="button" disabled={page === 0} onClick={() => changePage(page - 1)} className="dashboard-action">Previous</button>
-              <p className="text-xs text-muted">Page {page + 1} of {result.totalPages}</p>
-              <button type="button" disabled={page + 1 >= result.totalPages} onClick={() => changePage(page + 1)} className="dashboard-action">Next</button>
-            </nav>
-          )}
-          <p className="mt-4 text-xs text-muted">Only your incidents appear here. Times use your local timezone.</p>
+          {result && <Pagination label="Incident pages" page={page} totalPages={result.totalPages} onChange={changePage} />}
+          <p className="mt-4 text-xs text-muted">Incidents from the selected workspace. Times use your local timezone.</p>
         </section>
       </div>
     </>
@@ -143,6 +151,9 @@ export function IncidentDetailsPage({ incidentId }: { incidentId: number }) {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const canEdit = canEditWorkspace(workspace)
+  const query = workspace?.role === 'OWNER' ? '' : workspaceQuery(incident?.workspaceId ?? null)
 
   function accept(result: Incident) {
     setIncident(result)
@@ -153,14 +164,19 @@ export function IncidentDetailsPage({ incidentId }: { incidentId: number }) {
 
   useEffect(() => {
     let active = true
-    incidentApi.get(incidentId)
-      .then(result => { if (active) accept(result) })
+    Promise.all([incidentApi.get(incidentId), teamApi.list()])
+      .then(([result, team]) => {
+        const workspace = findWorkspace(team.workspaces, result.workspaceId)
+        if (!workspace) throw new Error('This workspace is no longer available.')
+        if (active) { accept(result); setWorkspace(workspace) }
+      })
       .catch(exception => { if (active) setError(exception.message) })
     return () => { active = false }
   }, [incidentId, reload])
 
   function refresh() {
     setIncident(null)
+    setWorkspace(null)
     setError('')
     setReload(value => value + 1)
   }
@@ -168,7 +184,7 @@ export function IncidentDetailsPage({ incidentId }: { incidentId: number }) {
   const loading = incident === null && !error
 
   async function save(kind: 'update' | 'publication') {
-    if (!incident || busy) return
+    if (!incident || busy || !canEdit) return
     setBusy(true)
     setError('')
     setNotice('')
@@ -181,6 +197,7 @@ export function IncidentDetailsPage({ incidentId }: { incidentId: number }) {
       setNotice(kind === 'update' ? 'Update saved.' : 'Publication settings saved.')
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Could not save this change.')
+      setWorkspace(null)
     } finally {
       setBusy(false)
     }
@@ -188,7 +205,7 @@ export function IncidentDetailsPage({ incidentId }: { incidentId: number }) {
 
   return (
     <div className="max-w-4xl">
-      <a href="#dashboard/incidents/" className="dashboard-action mb-6"><ChevronLeft size={14} />Incidents</a>
+      <a href={`#dashboard/incidents/${query}`} className="dashboard-action mb-6"><ChevronLeft size={14} />Incidents</a>
       <header className="mb-8 flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="eyebrow mb-2">Incident #{incidentId}</p>
@@ -214,7 +231,7 @@ export function IncidentDetailsPage({ incidentId }: { incidentId: number }) {
               <div><dt className="text-xs text-muted">Source</dt><dd className="mt-2">{incident.cause}</dd></div>
               <div><dt className="text-xs text-muted">Outage duration</dt><dd className="mt-2">{duration(incident)}</dd></div>
             </dl>
-            <a href={`#dashboard/monitoring/${incident.monitorId}/edit/`} className="mt-6 inline-block text-xs font-semibold text-green hover:underline">View monitor</a>
+            <a href={canEdit ? `#dashboard/monitoring/${incident.monitorId}/edit/${query}` : `#dashboard/monitoring/${query}`} className="mt-6 inline-block text-xs font-semibold text-green hover:underline">{canEdit ? 'View monitor' : 'View monitors'}</a>
           </section>
           <section aria-label="Incident timeline" className="dashboard-panel mt-6 p-6">
             <h2 className="text-sm font-semibold">Timeline</h2>
@@ -243,7 +260,7 @@ export function IncidentDetailsPage({ incidentId }: { incidentId: number }) {
               </li>
             </ol>
           </section>
-          <form onSubmit={event => { event.preventDefault(); void save('update') }} className="dashboard-panel mt-6 space-y-5 p-6">
+          {canEdit && <><form onSubmit={event => { event.preventDefault(); void save('update') }} className="dashboard-panel mt-6 space-y-5 p-6">
             <h2 className="text-sm font-semibold">Add an update</h2>
             <fieldset disabled={busy} className="space-y-4">
               <label className="block text-xs font-medium">Progress
@@ -267,14 +284,14 @@ export function IncidentDetailsPage({ incidentId }: { incidentId: number }) {
               </label>
               <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={published} onChange={event => setPublished(event.target.checked)} className="accent-green" />Publish this incident</label>
             </fieldset>
-            <p className="text-xs leading-6 text-muted">The title, progress, timestamps and all updates will appear on every status page in your account that includes this monitor. Uncheck to hide them. The automatic failure reason stays private.</p>
+            <p className="text-xs leading-6 text-muted">The title, progress, timestamps and all updates will appear on every status page in this workspace that includes this monitor. Uncheck to hide them. The automatic failure reason stays private.</p>
             <button disabled={busy || !title.trim()} className="dashboard-action">Save publication settings</button>
-          </form>
+          </form></>}
           <p className="mt-4 text-xs text-muted">Times use your local timezone. Duration is based on when checks detected the outage and recovery.</p>
-          <IncidentHelp incidentId={incident.id} onUseDraft={text => {
+          {canEdit && <IncidentHelp incidentId={incident.id} onUseDraft={text => {
             if (message.trim() && !window.confirm('Replace your current update draft with these suggestions?')) return
             setMessage(text)
-          }} />
+          }} />}
         </>
       )}
       {error && <button type="button" onClick={refresh} className="dashboard-action">Try again</button>}

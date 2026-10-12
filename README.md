@@ -18,7 +18,9 @@ StatusRobot is an open-source, self-hosted uptime monitoring application for web
 
 The frontend uses React, TypeScript and Tailwind CSS. The backend uses Java and Spring Boot, with MySQL for accounts and configuration and MongoDB for monitoring history.
 
-Client API requests use Axios. The shared instance in `client/src/services/api.ts` sets the API address, timeout and session-cookie setting. Each service sends its request and returns `response.data`, which Axios has already read as JSON. Write requests still get a fresh CSRF token from `/api/auth/csrf`. Authentication uses a 10-second timeout, normal requests use 15 seconds and incident requests use 30 seconds. Failed requests are not retried automatically.
+Client API requests use Axios. The shared instance in `client/src/services/api.ts` sets the API address, timeout and session-cookie setting. `requests.ts` handles the repeated dashboard requests, CSRF headers and errors. Each service returns `response.data`, which Axios has already read as JSON. Authentication uses a 10-second timeout, normal requests use 15 seconds and incident requests use 30 seconds. Failed requests are not retried automatically.
+
+For a code walkthrough with diagrams and practice questions, read [architecture.md](architecture.md). [exceldraw.md](exceldraw.md) contains diagrams you can copy into Excalidraw's Mermaid import.
 
 ## Requirements
 
@@ -130,24 +132,24 @@ Open **Team members** in your dashboard and invite an existing account by email.
 | Role | Access |
 | --- | --- |
 | Owner | Manages their monitors, sends invitations, changes roles and removes members. |
-| Viewer | Browses the owner's monitors and check history. Cannot change monitors. |
-| Editor | Creates, edits, pauses and deletes the owner's monitors. Can select the owner's existing Discord channels for alerts. |
+| Viewer | Reads the workspace's monitors, check history, incidents and maintenance. Cannot make changes or request incident analysis. |
+| Editor | Manages monitors, creates and updates incidents, publishes incident updates, and schedules, edits, publishes, cancels or deletes maintenance. Can select existing Discord channels for monitors. |
 
-After accepting an invitation, use the workspace picker in **Monitoring** to switch between your own monitors and shared ones. You can belong to several workspaces. Sharing includes all current and future monitors owned by that account. New monitors created in a shared workspace belong to its owner, not the editor.
+After accepting an invitation, use the workspace picker in **Monitoring**, **Incidents** or **Maintenance** to switch between your own workspace and shared ones. The selected workspace follows you between these three tabs. You can belong to several workspaces. Sharing includes all current and future monitors, incidents and maintenance owned by that account. Records created by an editor in a shared workspace belong to its owner, not the editor.
 
-Editors can delete monitors and their history, so only give this role to people you trust. Status page and incident management, team management, account settings and integration management remain owner-only. Saved webhook URLs are never returned to teammates. Monitor details and check history still have the existing public read endpoints.
+Editors can delete monitors and their history and publish incident updates or maintenance notices on the owner's existing status pages, so only give this role to people you trust. Viewers can read private incident notes and maintenance descriptions in their shared workspace. Status page configuration, team management, account settings and integration management remain owner-only. Saved webhook URLs are never returned to teammates. Monitor details and check history still have the existing public read endpoints.
 
 The owner can cancel pending invitations, change roles or remove members. Invitees can decline, and accepted members can leave. Removal is checked on subsequent API requests. It does not delete an account or any monitors. A workspace allows up to 50 members including pending invitations.
 
 Team memberships are stored in the MySQL `team_members` table. Hibernate creates it on backend startup with the existing schema update setting. Back up your database before upgrading and make sure the database account can create tables and foreign keys. Restart the backend after installing this change.
 
-The code uses one membership record per owner and member. `accepted` controls whether the invitation gives access. `TeamService.requireAccess()` reads the saved membership and role before shared monitor requests. The frontend hides editing controls for viewers, but the backend still checks permissions. Short comments explain the acceptance check, the invitation lock and why integration choices use the monitor owner's ID.
+The code uses one membership record per owner and member. `accepted` controls whether the invitation gives access. `TeamService.requireAccess()` reads the saved membership and role before shared requests. The frontend hides editing controls for viewers, but the backend still checks permissions on every request. A role change or removal takes effect on the next request. Short comments explain the acceptance check, the invitation lock and why integration choices use the monitor owner's ID.
 
 ## Maintenance
 
-Open **Maintenance** in the dashboard and choose **Schedule maintenance**. Enter a title, optional description, start and end times, then select between 1 and 30 monitors from your account. Times in the form and list use your browser's local timezone and are sent to the backend in UTC.
+Open **Maintenance** in the dashboard, select a workspace and choose **Schedule maintenance**. Enter a title, optional description, start and end times, then select between 1 and 30 monitors from that workspace. Times in the form and list use your browser's local timezone and are sent to the backend in UTC.
 
-Only the owner can manage these one-off schedules. Team members cannot schedule work for another owner's monitors, even with Editor access. The list shows 20 windows per page and refreshes every 30 seconds.
+Owners and accepted Editors can manage these one-off schedules. Viewers can read them. A schedule cannot combine monitors from different workspaces or be moved to another workspace. The list shows 20 windows per page and refreshes every 30 seconds.
 
 Each window has a title, optional description, start time, end time and selected monitors. New windows must start in the future and end after they start. Use ISO 8601 timestamps with a timezone, such as `2030-01-01T10:00:00Z`. The backend stores the times in UTC.
 
@@ -174,15 +176,15 @@ The endpoints below require a signed-in session. POST, PUT, PATCH and DELETE als
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| GET | `/api/maintenance/mine?page=0` | List your windows, 20 per page. |
-| GET | `/api/maintenance/{id}` | Read one of your windows. |
-| POST | `/api/maintenance` | Create a window. |
+| GET | `/api/maintenance/mine?page=0` | List workspace windows, 20 per page. Optional `workspaceId` selects a shared workspace. |
+| GET | `/api/maintenance/{id}` | Read a window you have access to. |
+| POST | `/api/maintenance` | Create a window. Optional `workspaceId` selects a shared workspace. |
 | PUT | `/api/maintenance/{id}` | Edit an upcoming window. |
 | PATCH | `/api/maintenance/{id}/cancel` | Cancel an upcoming or ongoing window. |
 | PATCH | `/api/maintenance/{id}/publication` | Publish or hide a notice using `{"published":true}` or `{"published":false}`. |
 | DELETE | `/api/maintenance/{id}` | Delete a window that is not ongoing. |
 
-Example POST body. Replace the IDs with your own monitors and choose future dates:
+Example POST body. Replace the IDs with monitors from the selected workspace and choose future dates:
 
 ```json
 {
@@ -195,13 +197,13 @@ Example POST body. Replace the IDs with your own monitors and choose future date
 }
 ```
 
-`Maintenance` stores the schedule. `MaintenanceRepository` reads and writes it. `MaintenanceService` checks ownership, dates and selected monitors. `MaintenanceController` exposes the API. `PingScheduler` checks `isActive()` before starting a monitor check. Short comments explain the date-based status, concurrent updates and monitor deletion links.
+`Maintenance` stores the schedule. `MaintenanceRepository` reads and writes it. `MaintenanceService` checks workspace access, dates and selected monitors. `MaintenanceController` exposes the API. `PingScheduler` checks `isActive()` before starting a monitor check. Short comments explain the date-based status, concurrent updates and monitor deletion links.
 
 The MySQL tables are `maintenance_windows` and `maintenance_monitors`. Hibernate creates them on backend startup with the existing schema update setting. Back up the database before upgrading and make sure its account can create tables, indexes and foreign keys. Restart the backend after installing this change. Deleting a monitor removes its maintenance links. If an unfinished window loses its last monitor, it is cancelled automatically. Completed history is kept.
 
 ## Incidents
 
-The Incidents tab lists outages for your own monitors. A failed HTTP check opens an incident. Repeated failures stay in the same incident, and the next successful response closes it. A slow but successful response counts as recovery, even if the monitor is still marked as degraded.
+The Incidents tab lists outages for the selected workspace. Owners and accepted Editors can create manual incidents, add updates and publish them. Viewers can read them. A failed HTTP check opens an incident. Repeated failures stay in the same incident, and the next successful response closes it. A slow but successful response counts as recovery, even if the monitor is still marked as degraded.
 
 Open an incident to see the first failure, detection time, recovery time and duration. Use the open and resolved filters to browse the history. Lists show 20 incidents per page. Refresh to load the latest checks.
 
@@ -209,7 +211,7 @@ Pausing a monitor does not close its incident. Recovery is confirmed by a succes
 
 Use **New incident** to report a problem manually. Choose a monitor, title and first update. Manual incidents start as investigating and stay open until you add a resolved update, even if HTTP checks succeed. Progress can be investigating, identified, monitoring or resolved. Resolved incidents cannot be reopened. Create a new incident for a new problem.
 
-All incidents start private. To share one, add an update, review the public title and check **Publish this incident** in its details. Its title, progress, timestamps and all written updates appear on every status page in your account that includes the affected monitor. Uncheck this setting to hide it again. Do not put secrets or internal details in updates. The automatic failure reason is not included in public incident responses.
+All incidents start private. To share one, add an update, review the public title and check **Publish this incident** in its details. Its title, progress, timestamps and all written updates appear on every status page in that workspace that includes the affected monitor. Uncheck this setting to hide it again. Do not put secrets or internal details in updates. The automatic failure reason is not included in public incident responses.
 
 Public pages refresh every 30 seconds and show up to 40 published incidents, with open incidents first. Private history still lists 20 incidents per page. Each incident allows up to 100 written updates, with 3000 characters per update.
 
@@ -219,13 +221,13 @@ The monitoring check saves the monitor state and automatic incident in one datab
 
 The API requires a signed-in session:
 
-- `GET /api/incidents?status=all&page=0` lists your incidents. Status can be `all`, `open` or `resolved`, and page numbers start at zero.
-- `GET /api/incidents/{id}` returns one of your incidents. Another user's incident returns 404.
+- `GET /api/incidents?status=all&page=0` lists workspace incidents. Optional `workspaceId` selects a shared workspace. Status can be `all`, `open` or `resolved`, and page numbers start at zero.
+- `GET /api/incidents/{id}` returns an incident from a workspace you have access to. Unrelated users receive 404.
 - `POST /api/incidents` creates a private manual incident with `monitorId`, `title` and `message`.
 - `POST /api/incidents/{id}/updates` adds a `stage` and `message`. Stage values are `INVESTIGATING`, `IDENTIFIED`, `MONITORING` and `RESOLVED`. Automatic incidents need a successful HTTP check before they can be resolved.
 - `PATCH /api/incidents/{id}` saves the public `title` and `published` flag. At least one written update is required before publishing.
 
-Write requests also require the session's CSRF token. Published incidents are included in the public status-page responses, but the private incident API still requires a signed-in owner.
+Write requests also require the session's CSRF token and Owner or Editor access. Published incidents are included in the public status-page responses, but the private incident API still requires an accepted workspace member or owner.
 
 History starts with checks after this feature is installed. Existing MongoDB logs are not converted into incidents.
 
@@ -246,7 +248,7 @@ Suggestions are shown privately and are not saved automatically. **Use as update
 The backend allows 5 analysis requests per account and 100 total requests per hour, with at most 3 running at once. Failed attempts count too. These limits apply per backend instance and reset when it restarts. Set spending limits and monitor usage in your OpenAI project before enabling this on a public server. Requests have a 5-second connection timeout and a 20-second response timeout. There are no automatic retries or paid calls from scheduled monitor checks.
 
 - `GET /api/incidents/analysis-settings` reports whether OpenAI support is configured, without returning the key.
-- `POST /api/incidents/{id}/analysis` requires ownership, CSRF and `consent: true`. Optional `context` allows up to 2000 characters. It returns private `text` and `model`, without publishing an update.
+- `POST /api/incidents/{id}/analysis` requires Owner or Editor access, CSRF and `consent: true`. Limits count the signed-in account making the request, not the workspace owner. Optional `context` allows up to 2000 characters. It returns private `text` and `model`, without publishing an update.
 
 Without a key, monitoring and all incident features still work. The automated tests use mock OpenAI responses and do not need a key or incur API costs.
 
@@ -260,7 +262,7 @@ Keep the rules about safe checks, secrets and separating facts from guesses. Cha
 
 ### Understanding the incident help code
 
-The controller checks that the incident belongs to the signed-in user. The service checks consent and configuration, starts a counted request, asks OpenAI and returns the answer. Its `finally` block always marks the request as finished, even when OpenAI fails.
+The controller checks that the signed-in user has Owner or Editor access to the incident's saved workspace. The service checks consent and configuration, starts a counted request, asks OpenAI and returns the answer. Its `finally` block always marks the request as finished, even when OpenAI fails.
 
 | File | Job |
 | --- | --- |

@@ -10,7 +10,6 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 import java.util.Map;
 
 @RestController
@@ -60,8 +59,4 @@ public class StatusPageController {
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, String> conflict() { return Map.of("message", "The page changed or its address is already in use. Refresh and try again."); }
 
-    @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<Map<String, String>> failed(ResponseStatusException exception) {
-        return ResponseEntity.status(exception.getStatusCode()).body(Map.of("message", exception.getReason()));
-    }
 }

@@ -3,6 +3,7 @@ package com.djmahirnationtv.status.backend.incident;
 import com.djmahirnationtv.status.backend.monitor.model.Monitor;
 import com.djmahirnationtv.status.backend.monitor.model.MonitorStatus;
 import com.djmahirnationtv.status.backend.monitor.repository.MonitorRepository;
+import com.djmahirnationtv.status.backend.team.TeamService;
 import jakarta.validation.constraints.*;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -18,10 +19,12 @@ import java.util.Collection;
 public class IncidentService {
     private final IncidentRepository incidents;
     private final MonitorRepository monitors;
+    private final TeamService teams;
 
-    public IncidentService(IncidentRepository incidents, MonitorRepository monitors) {
+    public IncidentService(IncidentRepository incidents, MonitorRepository monitors, TeamService teams) {
         this.incidents = incidents;
         this.monitors = monitors;
+        this.teams = teams;
     }
 
     @Transactional
@@ -50,12 +53,12 @@ public class IncidentService {
 
     public record IncidentResponse(Long id, Long monitorId, String monitorName, String cause,
                                    Instant startedAt, Instant resolvedAt, String title, boolean manual,
-                                   boolean published, Incident.Stage stage, List<UpdateResponse> updates) {
+                                   boolean published, Incident.Stage stage, List<UpdateResponse> updates, Long workspaceId) {
         static IncidentResponse from(Incident incident) {
             return new IncidentResponse(incident.getId(), incident.getMonitorId(), incident.getMonitorName(),
                     incident.getCause(), incident.getStartedAt(), incident.getResolvedAt(), incident.getTitle(),
                     incident.isManual(), incident.isPublished(), incident.getStage(),
-                    incident.getUpdates().stream().map(UpdateResponse::from).toList());
+                    incident.getUpdates().stream().map(UpdateResponse::from).toList(), incident.getOwnerId());
         }
     }
 
@@ -65,16 +68,18 @@ public class IncidentService {
     public record PublicationRequest(@NotBlank @Size(max = 100) String title, boolean published) {}
 
     @Transactional
-    public IncidentResponse create(CreateRequest input, Long ownerId) {
-        var monitor = monitors.findById(input.monitorId()).filter(m -> ownerId.equals(m.getOwnerId()))
+    public IncidentResponse create(CreateRequest input, Long userId) {
+        var monitor = monitors.findById(input.monitorId()).filter(m -> m.getOwnerId() != null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Monitor not found."));
-        return IncidentResponse.from(incidents.saveAndFlush(Incident.manual(ownerId, monitor.getId(),
+        teams.requireAccess(monitor.getOwnerId(), userId, true);
+        // Shared incidents belong to the monitor's workspace, not the editor.
+        return IncidentResponse.from(incidents.saveAndFlush(Incident.manual(monitor.getOwnerId(), monitor.getId(),
                 monitor.getName(), input.title().strip(), input.message().strip())));
     }
 
     @Transactional
-    public IncidentResponse update(Long id, UpdateRequest input, Long ownerId) {
-        Incident incident = owned(id, ownerId);
+    public IncidentResponse update(Long id, UpdateRequest input, Long userId) {
+        Incident incident = accessible(id, userId, true);
         if (!incident.isManual() && input.stage() == Incident.Stage.RESOLVED && incident.getResolvedAt() == null)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A successful check must confirm recovery for an automatic incident.");
         if (incident.getResolvedAt() != null && input.stage() != Incident.Stage.RESOLVED)
@@ -86,17 +91,19 @@ public class IncidentService {
     }
 
     @Transactional
-    public IncidentResponse publish(Long id, PublicationRequest input, Long ownerId) {
-        Incident incident = owned(id, ownerId);
+    public IncidentResponse publish(Long id, PublicationRequest input, Long userId) {
+        Incident incident = accessible(id, userId, true);
         if (input.published() && incident.getUpdates().isEmpty())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Add a public update before publishing this incident.");
         incident.publish(input.title().strip(), input.published());
         return IncidentResponse.from(incidents.saveAndFlush(incident));
     }
 
-    private Incident owned(Long id, Long ownerId) {
-        return incidents.findByIdAndOwnerId(id, ownerId)
+    private Incident accessible(Long id, Long userId, boolean editing) {
+        Incident incident = incidents.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found."));
+        teams.requireAccess(incident.getOwnerId(), userId, editing);
+        return incident;
     }
 
     public record Listing(List<IncidentResponse> incidents, int page, int totalPages, long totalElements) {}
@@ -114,12 +121,23 @@ public class IncidentService {
     }
 
     @Transactional(readOnly = true)
-    public IncidentResponse get(Long id, Long ownerId) {
-        return IncidentResponse.from(owned(id, ownerId));
+    public IncidentResponse get(Long id, Long userId) {
+        return get(id, userId, false);
     }
 
     @Transactional(readOnly = true)
-    public Listing mine(Long ownerId, String status, int page) {
+    public IncidentResponse get(Long id, Long userId, boolean editing) {
+        return IncidentResponse.from(accessible(id, userId, editing));
+    }
+
+    @Transactional(readOnly = true)
+    public Listing mine(Long userId, String status, int page) {
+        return mine(userId, status, page, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Listing mine(Long userId, String status, int page, Long workspaceId) {
+        Long ownerId = teams.workspaceOwner(workspaceId, userId, false);
         if (page < 0 || page > 100_000) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a valid page number.");
         }

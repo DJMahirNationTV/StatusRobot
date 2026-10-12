@@ -188,12 +188,12 @@ class MaintenanceTests {
     }
 
     @Test
-    void editorAccessToMonitorsDoesNotGiveMaintenanceOwnership() throws Exception {
+    void editorCanReadMaintenanceButCannotMixWorkspaces() throws Exception {
         var invitation = teams.invite(owner.getId(), other.getEmail(), TeamMember.Role.EDITOR);
         teams.accept(invitation.id(), other.getId());
         var saved = window(startsAt, endsAt, List.of(website), false);
         mvc.perform(get("/api/maintenance/" + saved.getId()).with(user(other.getId().toString())))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk()).andExpect(jsonPath("$.workspaceId").value(owner.getId()));
         mvc.perform(post("/api/maintenance").with(user(other.getId().toString())).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(input(startsAt, endsAt, List.of(website.getId()))))
                 .andExpect(status().isBadRequest());
@@ -211,7 +211,7 @@ class MaintenanceTests {
         assertThat(maintenance.isActive(website.getId(), start)).isTrue();
         assertThat(maintenance.isActive(website.getId(), end)).isFalse();
         assertThat(maintenance.isActive(api.getId(), start)).isFalse();
-        var afterRestart = new MaintenanceService(windows, monitors);
+        var afterRestart = new MaintenanceService(windows, monitors, teams);
         assertThat(afterRestart.isActive(website.getId(), start)).isTrue();
         saved.setCancelled(true);
         windows.saveAndFlush(saved);

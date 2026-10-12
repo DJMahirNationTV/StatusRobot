@@ -89,13 +89,20 @@ public class TeamService {
     }
 
     @Transactional(readOnly = true)
+    public Long workspaceOwner(Long workspaceId, Long userId, boolean editing) {
+        Long ownerId = workspaceId == null ? userId : workspaceId;
+        requireAccess(ownerId, userId, editing);
+        return ownerId;
+    }
+
+    @Transactional(readOnly = true)
     public void requireAccess(Long ownerId, Long userId, boolean editing) {
         if (ownerId.equals(userId)) return;
         // Read the saved role each time. Removed members cannot keep using old access.
         TeamMember membership = members.findByOwnerIdAndMemberIdAndAcceptedTrue(ownerId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found."));
         if (editing && membership.getRole() != TeamMember.Role.EDITOR) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Viewers cannot change monitors.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Viewers cannot change this workspace.");
         }
     }
 
