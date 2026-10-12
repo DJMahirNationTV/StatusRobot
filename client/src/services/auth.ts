@@ -1,4 +1,5 @@
-import { API_BASE } from './api'
+import axios from 'axios'
+import { API_BASE, http, requestError } from './api'
 
 export interface AuthUser {
   id: number
@@ -6,51 +7,49 @@ export interface AuthUser {
   provider: 'local' | 'github' | 'discord'
 }
 
-async function checkResponse(response: Response) {
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(body?.message || 'The request could not be completed. Please try again.')
-  }
-  return response
-}
-
-async function request(path: string, options: RequestInit = {}) {
-  try {
-    return await fetch(`${API_BASE}/auth${path}`, {
-      ...options,
-      credentials: 'include',
-      signal: AbortSignal.timeout(10000),
-    })
-  } catch {
-    throw new Error('We could not reach the server. Please try again in a moment.')
-  }
-}
-
 export async function csrfHeaders(): Promise<Record<string, string>> {
-  const csrfResponse = await checkResponse(await request('/csrf'))
-  const csrf: { token: string; headerName: string } = await csrfResponse.json()
-  return { [csrf.headerName]: csrf.token }
+  try {
+    const response = await http.get<{ token: string; headerName: string }>('/auth/csrf', { timeout: 10000 })
+    const csrf = response.data
+    return { [csrf.headerName]: csrf.token }
+  } catch (error) {
+    throw requestError(error, 'The request could not be completed. Please try again.')
+  }
 }
 
-async function post(path: string, body?: BodyInit, contentType?: string) {
+async function post(path: string, data?: unknown, contentType?: string) {
   const headers = await csrfHeaders()
   if (contentType) headers['Content-Type'] = contentType
-  return checkResponse(await request(path, { method: 'POST', headers, body }))
+  try {
+    await http.post(`/auth${path}`, data, { headers, timeout: 10000 })
+  } catch (error) {
+    throw requestError(error, 'The request could not be completed. Please try again.')
+  }
 }
 
 export const authApi = {
   async me(): Promise<AuthUser | null> {
-    const response = await request('/me')
-    if (response.status === 401) return null
-    return (await checkResponse(response)).json()
+    try {
+      const response = await http.get<AuthUser>('/auth/me', { timeout: 10000 })
+      return response.data
+    } catch (error) {
+      // A missing session is normal before signing in.
+      if (axios.isAxiosError(error) && error.response?.status === 401) return null
+      throw requestError(error, 'The request could not be completed. Please try again.')
+    }
   },
 
   async providers(): Promise<string[]> {
-    return (await checkResponse(await request('/providers'))).json()
+    try {
+      const response = await http.get<string[]>('/auth/providers', { timeout: 10000 })
+      return response.data
+    } catch (error) {
+      throw requestError(error, 'The request could not be completed. Please try again.')
+    }
   },
 
   async register(email: string, password: string) {
-    await post('/register', JSON.stringify({ email, password }), 'application/json')
+    await post('/register', { email, password })
   },
 
   async login(email: string, password: string): Promise<AuthUser> {
