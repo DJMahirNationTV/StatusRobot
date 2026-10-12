@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, CircleAlert, RefreshCw, Server } from 'lucide-react'
+import { Activity, CircleAlert, RefreshCw, Server, Wrench } from 'lucide-react'
 import { api } from '../services/api'
 import { statusPageApi } from '../services/statusPages'
 import type { StatusPageData } from '../services/statusPages'
@@ -7,6 +7,8 @@ import type { MonitorWithDetails } from '../types/monitor'
 import { MonitorHistoryPanel } from '../components/MonitorHistoryPanel'
 import { stageLabels } from '../services/incidents'
 import type { PublicIncident } from '../services/incidents'
+import { maintenanceLabels } from '../services/maintenance'
+import type { PublicMaintenance } from '../services/maintenance'
 
 export function StatusPage({
   slug,
@@ -17,6 +19,7 @@ export function StatusPage({
 }) {
   const [monitors, setMonitors] = useState<MonitorWithDetails[]>([])
   const [incidents, setIncidents] = useState<PublicIncident[]>([])
+  const [maintenance, setMaintenance] = useState<PublicMaintenance[]>([])
   const [title, setTitle] = useState(page?.name ?? 'Live status')
   const [description, setDescription] = useState(page?.description ?? '')
   const [loading, setLoading] = useState(true)
@@ -50,6 +53,7 @@ export function StatusPage({
           setDescription(current?.description ?? '')
           setMonitors(detailed)
           setIncidents(current?.incidents ?? [])
+          setMaintenance(current?.maintenance ?? [])
           setUpdatedAt(new Date())
           setError('')
           setHistoryRefresh((value) => value + 1)
@@ -74,7 +78,12 @@ export function StatusPage({
     }
   }, [page, slug, refresh])
 
-  const active = monitors.filter((monitor) => monitor.status !== 'PAUSED')
+  const maintainedIds = new Set(maintenance
+    .filter(item => item.status === 'IN_PROGRESS')
+    .flatMap(item => item.monitorIds))
+  const hasMaintenance = maintainedIds.size > 0
+  // A saved check result is not the current status while checks are skipped.
+  const active = monitors.filter(monitor => monitor.status !== 'PAUSED' && !maintainedIds.has(monitor.id))
   const hasChecks =
     active.length > 0 && active.every((monitor) => monitor.lastCheckedAt)
   const hasFailure = active.some(
@@ -84,20 +93,22 @@ export function StatusPage({
     (monitor) => monitor.lastCheckedAt && monitor.status === 'DEGRADED'
   )
   const hasIncident = incidents.some(incident => !incident.resolvedAt)
-  const allOperational = hasChecks && !hasFailure && !hasSlow && !hasIncident
+  const allOperational = hasChecks && !hasFailure && !hasSlow && !hasIncident && !hasMaintenance
   const heading = error
     ? 'Status is currently unavailable'
     : monitors.length === 0
       ? 'No monitors to show yet'
       : hasFailure || hasIncident
         ? 'Some services need attention'
-        : hasSlow
-          ? 'Some services are responding slowly'
-          : active.length === 0
-            ? 'All monitors are paused'
-            : !hasChecks
-              ? 'Waiting for service checks'
-              : 'All systems operational'
+        : hasMaintenance
+          ? 'Maintenance in progress'
+          : hasSlow
+            ? 'Some services are responding slowly'
+            : active.length === 0
+              ? 'All monitors are paused'
+              : !hasChecks
+                ? 'Waiting for service checks'
+                : 'All systems operational'
 
   return (
     <main id="main" tabIndex={-1} className="page-shell flex-1 py-12 sm:py-18">
@@ -134,6 +145,8 @@ export function StatusPage({
         >
           {error || hasFailure || hasSlow || hasIncident ? (
             <CircleAlert className="shrink-0 text-amber-700" size={23} />
+          ) : hasMaintenance ? (
+            <Wrench className="shrink-0 text-amber-700" size={23} />
           ) : (
             <Activity className="shrink-0 text-green" size={23} />
           )}
@@ -172,6 +185,28 @@ export function StatusPage({
             Showing the last available results. These may be out of date.
           </p>
         )}
+        {maintenance.length > 0 && <section aria-label="Published maintenance" className="mb-8">
+          <h2 className="mb-4 font-heading text-xl font-bold">Maintenance</h2>
+          <div className="space-y-4">
+            {maintenance.map(item => <article key={item.id} aria-label={item.title} className="rounded-xl border border-line bg-white p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h3 className="min-w-0 flex-1 break-words text-sm font-semibold">{item.title}</h3>
+                <span className={`rounded-md px-2 py-1 text-xs font-medium ${item.status === 'IN_PROGRESS'
+                  ? 'bg-amber-50 text-amber-800' : item.status === 'SCHEDULED' ? 'bg-sage text-green' : 'bg-canvas text-muted'}`}>
+                  {maintenanceLabels[item.status]}</span>
+              </div>
+              <p className="mt-3 text-xs leading-6 text-muted">
+                <time dateTime={item.startsAt}>{new Date(item.startsAt).toLocaleString()}</time>{' to '}
+                <time dateTime={item.endsAt}>{new Date(item.endsAt).toLocaleString()}</time>
+              </p>
+              {item.description && <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-muted">{item.description}</p>}
+              <p className="mt-3 break-words text-xs leading-6 text-muted">Affected services: {item.monitorIds
+                .map(id => monitors.find(monitor => monitor.id === id)?.name || `Monitor #${id}`).join(', ')}</p>
+              {item.status === 'IN_PROGRESS' && <p className="mt-2 text-xs leading-6 text-amber-800">Automatic checks are skipped during this window. History below shows the recorded checks.</p>}
+            </article>)}
+          </div>
+          <p className="mt-3 text-xs text-muted">Published notices only, up to 40. Times use your local timezone.</p>
+        </section>}
         {incidents.length > 0 && <section aria-label="Published incidents" className="mb-8">
           <h2 className="mb-4 font-heading text-xl font-bold">Incidents</h2>
           <div className="space-y-4">
@@ -198,23 +233,26 @@ export function StatusPage({
           {monitors.map((monitor) => {
             const latest = monitor.pings?.[0]
             const paused = monitor.status === 'PAUSED'
-            const label = paused
-              ? 'Paused'
-              : !monitor.lastCheckedAt
-                ? 'Awaiting check'
-                : monitor.status === 'UP'
-                  ? 'Operational'
-                  : monitor.status === 'DEGRADED'
-                    ? 'Slow response'
-                    : 'Not responding'
-            const color =
-              paused || !monitor.lastCheckedAt
-                ? 'text-muted'
-                : monitor.status === 'UP'
-                  ? 'text-green'
-                  : monitor.status === 'DEGRADED'
-                    ? 'text-amber-800'
-                    : 'text-rose-700'
+            const underMaintenance = maintainedIds.has(monitor.id)
+            let label = 'Awaiting check'
+            let color = 'text-muted'
+            if (paused) {
+              label = 'Paused'
+            } else if (underMaintenance) {
+              label = 'Under maintenance'
+              color = 'text-amber-800'
+            } else if (monitor.lastCheckedAt) {
+              if (monitor.status === 'UP') {
+                label = 'Operational'
+                color = 'text-green'
+              } else if (monitor.status === 'DEGRADED') {
+                label = 'Slow response'
+                color = 'text-amber-800'
+              } else {
+                label = 'Not responding'
+                color = 'text-rose-700'
+              }
+            }
             return (
               <article
                 key={monitor.id}
@@ -239,7 +277,7 @@ export function StatusPage({
                 </div>
                 <div className="mt-4 flex flex-wrap justify-between gap-3 text-xs text-muted">
                   <p>
-                    Last response:{' '}
+                    {underMaintenance ? 'Last recorded response: ' : 'Last response: '}
                     {latest?.successful
                       ? `${latest.responseTimeMs} ms`
                       : latest

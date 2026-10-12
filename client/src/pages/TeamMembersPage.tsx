@@ -155,7 +155,6 @@ export function TeamMembersPage() {
               ))}
             </div>
           </section>
-          <p className="text-xs leading-6 text-muted">Sharing only applies to monitors. Status page and incident management, account settings and integration management remain owner-only. Removing a member does not delete their account or any monitors.</p>
         </div>
       )}
     </>

@@ -14,6 +14,7 @@ import java.util.Comparator;
 import jakarta.validation.constraints.*;
 import com.djmahirnationtv.status.backend.monitor.dto.MonitorResponse;
 import com.djmahirnationtv.status.backend.incident.IncidentService;
+import com.djmahirnationtv.status.backend.maintenance.MaintenanceService;
 
 @Service
 public class StatusPageService {
@@ -22,14 +23,16 @@ public class StatusPageService {
     private final UserRepository users;
     private final String ownerEmail;
     private final IncidentService incidents;
+    private final MaintenanceService maintenance;
 
     public StatusPageService(StatusPageRepository pages, MonitorRepository monitors, UserRepository users,
-                             @Value("${app.status-pages.owner-email:}") String ownerEmail, IncidentService incidents) {
+                             @Value("${app.status-pages.owner-email:}") String ownerEmail, IncidentService incidents, MaintenanceService maintenance) {
         this.pages = pages;
         this.monitors = monitors;
         this.users = users;
         this.ownerEmail = ownerEmail.strip().toLowerCase(java.util.Locale.ROOT);
         this.incidents = incidents;
+        this.maintenance = maintenance;
     }
 
     public record Listing(boolean canPinDefault, List<StatusPageResponse> pages) {}
@@ -52,9 +55,10 @@ public class StatusPageService {
 
     private StatusPageResponse publicView(StatusPage page) {
         var response = StatusPageResponse.from(page);
+        var monitorIds = response.monitors().stream().map(MonitorResponse::id).toList();
         return new StatusPageResponse(response.id(), response.name(), response.slug(), response.description(),
-                response.pinnedDefault(), response.monitors(), incidents.publishedForPage(page.getOwnerId(),
-                response.monitors().stream().map(MonitorResponse::id).toList()));
+                response.pinnedDefault(), response.monitors(), incidents.publishedForPage(page.getOwnerId(), monitorIds),
+                maintenance.publishedForPage(page.getOwnerId(), monitorIds));
     }
 
     @Transactional
@@ -131,12 +135,12 @@ public class StatusPageService {
 
     public record StatusPageResponse(Long id, String name, String slug, String description,
                                      boolean pinnedDefault, List<MonitorResponse> monitors,
-                                     List<IncidentService.PublicIncident> incidents) {
+                                     List<IncidentService.PublicIncident> incidents, List<MaintenanceService.PublicNotice> maintenance) {
         static StatusPageResponse from(StatusPage page) {
             var monitors = page.getMonitors().stream().filter(m -> page.getOwnerId().equals(m.getOwnerId()))
                     .map(MonitorResponse::from).sorted(Comparator.comparing(MonitorResponse::name)).toList();
             return new StatusPageResponse(page.getId(), page.getName(), page.getSlug(), page.getDescription(),
-                    page.isPinnedDefault(), monitors, List.of());
+                    page.isPinnedDefault(), monitors, List.of(), List.of());
         }
     }
 }

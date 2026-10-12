@@ -328,8 +328,7 @@ export function IntegrationsPage() {
         </section>
       )}
       <p className="mt-5 text-xs text-muted">
-        Discord is the only integration available for now. API keys and other
-        integrations are not available yet.
+        Discord is available for now only.
       </p>
     </>
   )

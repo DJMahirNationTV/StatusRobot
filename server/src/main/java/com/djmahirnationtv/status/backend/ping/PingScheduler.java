@@ -3,6 +3,7 @@ package com.djmahirnationtv.status.backend.ping;
 import com.djmahirnationtv.status.backend.monitor.model.Monitor;
 import com.djmahirnationtv.status.backend.monitor.model.MonitorStatus;
 import com.djmahirnationtv.status.backend.monitor.repository.MonitorRepository;
+import com.djmahirnationtv.status.backend.maintenance.MaintenanceService;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -16,10 +17,12 @@ public class PingScheduler {
     private static final Logger log = LoggerFactory.getLogger(PingScheduler.class);
     private final MonitorRepository monitorRepository;
     private final PingExecutionService pingExecutionService;
+    private final MaintenanceService maintenance;
 
-    public PingScheduler(MonitorRepository monitorRepository, PingExecutionService pingExecutionService) {
+    public PingScheduler(MonitorRepository monitorRepository, PingExecutionService pingExecutionService, MaintenanceService maintenance) {
         this.monitorRepository = monitorRepository;
         this.pingExecutionService = pingExecutionService;
+        this.maintenance = maintenance;
     }
 
     @Scheduled(fixedDelay = 10_000) // polls basically every 10 seconds
@@ -29,6 +32,8 @@ public class PingScheduler {
 
         for (Monitor monitor : activeMonitors) {
             if (isDueForPing(monitor, now)) {
+                // Skip planned work without changing the monitor's manual pause setting.
+                if (maintenance.isActive(monitor.getId(), Instant.now())) continue;
                 try {
                     pingExecutionService.ping(monitor);
                 } catch (ObjectOptimisticLockingFailureException exception) {
