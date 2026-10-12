@@ -1,50 +1,36 @@
-import { API_BASE } from './api'
+import axios from 'axios'
+import { http, requestError } from './api'
 import { csrfHeaders } from './auth'
 import type { Monitor, MonitorInput } from '../types/monitor'
 import type { IntegrationListing } from './integrations'
 
 async function request(path: string, method = 'GET', monitor?: MonitorInput) {
   const headers = method === 'GET' ? {} : await csrfHeaders()
-  let response: Response
   try {
-    response = await fetch(`${API_BASE}/monitors${path}`, {
-      method,
-      credentials: 'include',
-      headers: { ...headers, ...(monitor ? { 'Content-Type': 'application/json' } : {}) },
-      body: monitor ? JSON.stringify(monitor) : undefined,
-      signal: AbortSignal.timeout(15000),
-    })
-  } catch {
-    throw new Error('Could not reach the server. Please try again.')
-  }
-  if (response.status === 401) {
-    window.location.hash = '#login'
-    throw new Error('Your session expired. Please sign in again.')
-  }
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(body?.message || (response.status === 404
+    return await http.request({ url: `/monitors${path}`, method, headers, data: monitor })
+  } catch (error) {
+    const fallback = axios.isAxiosError(error) && error.response?.status === 404
       ? 'This monitor is no longer available. Refresh the list.'
-      : 'Could not save this change. Please try again.'))
+      : 'Could not save this change. Please try again.'
+    throw requestError(error, fallback, true)
   }
-  return response
 }
 
 export const monitorApi = {
   async list(workspaceId: number | null = null): Promise<Monitor[]> {
-    return (await request(`/mine${workspaceId === null ? '' : `?workspaceId=${workspaceId}`}`)).json()
+    return (await request(`/mine${workspaceId === null ? '' : `?workspaceId=${workspaceId}`}`)).data
   },
   async create(monitor: MonitorInput, workspaceId: number | null = null): Promise<Monitor> {
-    return (await request(workspaceId === null ? '' : `?workspaceId=${workspaceId}`, 'POST', monitor)).json()
+    return (await request(workspaceId === null ? '' : `?workspaceId=${workspaceId}`, 'POST', monitor)).data
   },
   async integrations(workspaceId: number | null = null): Promise<IntegrationListing> {
-    return (await request(`/workspace/integrations${workspaceId === null ? '' : `?workspaceId=${workspaceId}`}`)).json()
+    return (await request(`/workspace/integrations${workspaceId === null ? '' : `?workspaceId=${workspaceId}`}`)).data
   },
   async update(id: number, monitor: MonitorInput): Promise<Monitor> {
-    return (await request(`/${id}`, 'PUT', monitor)).json()
+    return (await request(`/${id}`, 'PUT', monitor)).data
   },
   async togglePause(id: number): Promise<Monitor> {
-    return (await request(`/${id}/toggle-pause`, 'PATCH')).json()
+    return (await request(`/${id}/toggle-pause`, 'PATCH')).data
   },
   async remove(id: number) {
     await request(`/${id}`, 'DELETE')

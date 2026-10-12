@@ -7,6 +7,8 @@ export const API_BASE = import.meta.env.VITE_API_URL || '/api'
 export const http = axios.create({
   baseURL: API_BASE,
   timeout: 15000,
+  responseType: 'json',
+  transitional: { silentJSONParsing: false }, // Report invalid JSON instead of accepting it as text.
   withCredentials: true, // Send the session cookie with API requests.
   withXSRFToken: false, // We get the CSRF header from /auth/csrf ourselves.
 })
@@ -17,7 +19,8 @@ export function requestError(error: unknown, fallback: string, redirectToLogin =
       window.location.hash = '#login'
       return new Error('Your session expired. Please sign in again.')
     }
-    if (!error.response) return new Error('Could not reach the server. Please try again.')
+    if (!error.response) return new Error(error.code === 'ERR_BAD_RESPONSE'
+      ? fallback : 'Could not reach the server. Please try again.')
     const message = error.response.data?.message
     if (typeof message === 'string' && message.trim()) return new Error(message)
   }

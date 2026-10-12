@@ -4,7 +4,9 @@ import { createServer as createHttpServer } from 'node:http'
 import { createServer as createViteServer } from 'vite'
 
 let vite, server, http, api, authApi, csrfHeaders, origin
+let monitorApi, incidentApi, integrationApi, maintenanceApi, statusPageApi, teamApi
 let requests = []
+let configs = []
 let nextReply = null
 let tokenNumber = 0
 const account = { id: 1, email: 'owner@example.com', provider: 'local' }
@@ -22,6 +24,7 @@ before(async () => {
       const reply = nextReply
       nextReply = null
       if (reply.disconnect) return request.socket.destroy()
+      if (reply.delay) await new Promise(resolve => setTimeout(resolve, reply.delay))
       response.writeHead(reply.status, { 'Content-Type': reply.html ? 'text/html' : 'application/json' })
       return response.end(reply.html || JSON.stringify(reply.data))
     }
@@ -46,7 +49,14 @@ before(async () => {
   vite = await createViteServer({ configFile: false, envDir: false, server: { middlewareMode: true, watch: null } })
   ;({ http, api } = await vite.ssrLoadModule('/src/services/api.ts'))
   ;({ authApi, csrfHeaders } = await vite.ssrLoadModule('/src/services/auth.ts'))
+  ;({ monitorApi } = await vite.ssrLoadModule('/src/services/monitors.ts'))
+  ;({ incidentApi } = await vite.ssrLoadModule('/src/services/incidents.ts'))
+  ;({ integrationApi } = await vite.ssrLoadModule('/src/services/integrations.ts'))
+  ;({ maintenanceApi } = await vite.ssrLoadModule('/src/services/maintenance.ts'))
+  ;({ statusPageApi } = await vite.ssrLoadModule('/src/services/statusPages.ts'))
+  ;({ teamApi } = await vite.ssrLoadModule('/src/services/teams.ts'))
   http.defaults.baseURL = `${origin}/api`
+  http.interceptors.request.use(config => { configs.push(config); return config })
 })
 
 after(async () => {
@@ -134,4 +144,144 @@ test('OAuth URLs still point to the backend authorization endpoint', async () =>
   assert.equal(authApi.oauthUrl('github'), `${origin}/oauth2/authorization/github`)
   assert.equal(authApi.oauthUrl('discord'), `${origin}/oauth2/authorization/discord`)
   assert.match((await csrfHeaders())['X-CSRF-TOKEN'], /^token-/)
+})
+
+test('all dashboard reads keep their endpoints and return response.data', async () => {
+  const reads = [
+    [() => monitorApi.list(), '/api/monitors/mine'],
+    [() => monitorApi.list(9), '/api/monitors/mine?workspaceId=9'],
+    [() => monitorApi.integrations(9), '/api/monitors/workspace/integrations?workspaceId=9'],
+    [() => integrationApi.list(), '/api/integrations'],
+    [() => integrationApi.selected(7), '/api/integrations/monitors/7'],
+    [() => maintenanceApi.list(2), '/api/maintenance/mine?page=2'],
+    [() => maintenanceApi.get(7), '/api/maintenance/7'],
+    [() => incidentApi.list('open', 2), '/api/incidents?status=open&page=2'],
+    [() => incidentApi.get(7), '/api/incidents/7'],
+    [() => incidentApi.analysisSettings(), '/api/incidents/analysis-settings'],
+    [() => statusPageApi.mine(), '/api/status-pages/mine'],
+    [() => statusPageApi.publicPage('our page'), '/api/status-pages/our%20page'],
+    [() => teamApi.list(), '/api/team-members'],
+  ]
+  for (const [call, expected] of reads) {
+    requests = []
+    assert.deepEqual(await call(), { ok: true })
+    assert.equal(requests.length, 1)
+    const actual = requests[0].path + (requests[0].query.size ? `?${requests[0].query}` : '')
+    assert.equal(actual, expected)
+    assert.equal(requests[0].method, 'GET')
+  }
+})
+
+test('dashboard writes keep their methods, JSON bodies and fresh CSRF headers', async () => {
+  const monitor = { name: 'Website', url: 'https://example.com', httpMethod: 'GET', intervalSeconds: 60, timeoutSeconds: 10, integrationIds: [] }
+  const maintenance = { title: 'Update', description: '', startsAt: '2030-01-01T10:00:00Z', endsAt: '2030-01-01T11:00:00Z', monitorIds: [7], published: false }
+  const page = { name: 'Status', slug: 'status', description: '', monitorIds: [7], pinnedDefault: false }
+  const writes = [
+    [() => monitorApi.create(monitor, 9), 'POST', '/api/monitors?workspaceId=9', monitor],
+    [() => monitorApi.update(7, monitor), 'PUT', '/api/monitors/7', monitor],
+    [() => monitorApi.togglePause(7), 'PATCH', '/api/monitors/7/toggle-pause'],
+    [() => monitorApi.remove(7), 'DELETE', '/api/monitors/7'],
+    [() => integrationApi.save(null, 'Alerts', 'https://example.com/webhook'), 'POST', '/api/integrations', { name: 'Alerts', webhookUrl: 'https://example.com/webhook' }],
+    [() => integrationApi.save(7, 'Alerts', 'https://example.com/webhook'), 'PUT', '/api/integrations/7', { name: 'Alerts', webhookUrl: 'https://example.com/webhook' }],
+    [() => integrationApi.test(7), 'POST', '/api/integrations/7/test'],
+    [() => integrationApi.remove(7), 'DELETE', '/api/integrations/7'],
+    [() => maintenanceApi.save(null, maintenance), 'POST', '/api/maintenance', maintenance],
+    [() => maintenanceApi.save(7, maintenance), 'PUT', '/api/maintenance/7', maintenance],
+    [() => maintenanceApi.cancel(7), 'PATCH', '/api/maintenance/7/cancel'],
+    [() => maintenanceApi.publish(7, false), 'PATCH', '/api/maintenance/7/publication', { published: false }],
+    [() => maintenanceApi.remove(7), 'DELETE', '/api/maintenance/7'],
+    [() => incidentApi.create({ monitorId: 7, title: 'Outage', message: 'Checking' }), 'POST', '/api/incidents', { monitorId: 7, title: 'Outage', message: 'Checking' }],
+    [() => incidentApi.update(7, 'IDENTIFIED', 'Checking'), 'POST', '/api/incidents/7/updates', { stage: 'IDENTIFIED', message: 'Checking' }],
+    [() => incidentApi.publish(7, 'Outage', false), 'PATCH', '/api/incidents/7', { title: 'Outage', published: false }],
+    [() => incidentApi.analyze(7, 'Test context'), 'POST', '/api/incidents/7/analysis', { consent: true, context: 'Test context' }],
+    [() => statusPageApi.save(null, page), 'POST', '/api/status-pages', page],
+    [() => statusPageApi.save(7, page), 'PUT', '/api/status-pages/7', page],
+    [() => statusPageApi.pin(7, false), 'PATCH', '/api/status-pages/7/pin-default', { pinnedDefault: false }],
+    [() => statusPageApi.remove(7), 'DELETE', '/api/status-pages/7'],
+    [() => teamApi.invite('member@example.com', 'VIEWER'), 'POST', '/api/team-members', { email: 'member@example.com', role: 'VIEWER' }],
+    [() => teamApi.setRole(7, 'EDITOR'), 'PATCH', '/api/team-members/7', { role: 'EDITOR' }],
+    [() => teamApi.accept(7), 'POST', '/api/team-members/7/accept'],
+    [() => teamApi.remove(7), 'DELETE', '/api/team-members/7'],
+  ]
+  for (const [call, method, expected, body] of writes) {
+    requests = []
+    await call()
+    assert.equal(requests.length, 2)
+    assert.equal(requests[0].path, '/api/auth/csrf')
+    const actual = requests[1].path + (requests[1].query.size ? `?${requests[1].query}` : '')
+    assert.equal(actual, expected)
+    assert.equal(requests[1].method, method)
+    assert.equal(requests[1].headers['x-csrf-token'], `token-${tokenNumber}`)
+    if (body) {
+      assert.match(requests[1].headers['content-type'], /^application\/json/)
+      assert.deepEqual(JSON.parse(requests[1].body), body)
+    } else assert.equal(requests[1].body, '')
+  }
+})
+
+test('a missing default status page returns null for the landing page', async () => {
+  assert.equal(await statusPageApi.defaultPage(), null)
+})
+
+test('expired dashboard sessions redirect to login in every service', async () => {
+  const reads = [
+    [() => monitorApi.list(), '/api/monitors/mine'],
+    [() => incidentApi.list(), '/api/incidents'],
+    [() => integrationApi.list(), '/api/integrations'],
+    [() => maintenanceApi.list(), '/api/maintenance/mine'],
+    [() => statusPageApi.mine(), '/api/status-pages/mine'],
+    [() => teamApi.list(), '/api/team-members'],
+  ]
+  for (const [call, path] of reads) {
+    window.location.hash = '#dashboard'
+    nextReply = { path, status: 401, data: {} }
+    await assert.rejects(call(), /Your session expired/)
+    assert.equal(window.location.hash, '#login')
+  }
+})
+
+test('permission, validation, conflict and rate-limit errors stay visible', async () => {
+  for (const status of [400, 403, 409, 429, 502]) {
+    nextReply = { path: '/api/maintenance/7', status, data: { message: `Test error ${status}` } }
+    window.location.hash = '#dashboard'
+    await assert.rejects(maintenanceApi.get(7), new RegExp(`Test error ${status}`))
+    assert.equal(window.location.hash, '#dashboard')
+  }
+  nextReply = { path: '/api/status-pages/missing', status: 404, data: {} }
+  await assert.rejects(statusPageApi.publicPage('missing'), /This status page was not found/)
+  nextReply = { path: '/api/monitors/mine', status: 404, data: {} }
+  await assert.rejects(monitorApi.list(), /This monitor is no longer available/)
+})
+
+test('authentication and incident requests keep their own timeout values', async () => {
+  configs = []
+  await authApi.me()
+  await monitorApi.list()
+  await incidentApi.analysisSettings()
+  assert.deepEqual(configs.map(config => config.timeout), [10000, 15000, 30000])
+})
+
+test('timed-out requests show an error without retrying', async () => {
+  requests = []
+  const normalTimeout = http.defaults.timeout
+  http.defaults.timeout = 30
+  nextReply = { path: '/api/monitors', status: 200, data: {}, delay: 100 }
+  try {
+    await assert.rejects(api.getMonitors(), /Could not reach the server/)
+    assert.equal(requests.length, 1)
+  } finally {
+    http.defaults.timeout = normalTimeout
+  }
+})
+
+test('invalid JSON is rejected rather than passed to a React page', async () => {
+  nextReply = { path: '/api/monitors', status: 200, html: '{invalid json}' }
+  await assert.rejects(api.getMonitors(), /Error on loading Monitors/)
+})
+
+test('a non-JSON 401 still returns to login', async () => {
+  window.location.hash = '#dashboard'
+  nextReply = { path: '/api/maintenance/mine', status: 401, html: '<html>Sign in</html>' }
+  await assert.rejects(maintenanceApi.list(), /Your session expired/)
+  assert.equal(window.location.hash, '#login')
 })
