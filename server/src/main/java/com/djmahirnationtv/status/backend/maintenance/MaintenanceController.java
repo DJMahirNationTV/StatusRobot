@@ -3,13 +3,11 @@ package com.djmahirnationtv.status.backend.maintenance;
 import jakarta.validation.Valid;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
@@ -67,8 +65,4 @@ public class MaintenanceController {
         return Map.of("message", "Maintenance or its monitors changed. Refresh and try again.");
     }
 
-    @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<Map<String, String>> failed(ResponseStatusException exception) {
-        return ResponseEntity.status(exception.getStatusCode()).body(Map.of("message", exception.getReason()));
-    }
 }

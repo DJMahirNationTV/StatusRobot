@@ -11,8 +11,6 @@ import org.springframework.security.core.Authentication;
 import jakarta.validation.Valid;
 import java.util.List;
 import com.djmahirnationtv.status.backend.integration.IntegrationService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/monitors")
@@ -70,11 +68,6 @@ public class MonitorController {
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, String> concurrentChange() {
         return Map.of("message", "This monitor changed during your request. Please try again.");
-    }
-
-    @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<Map<String, String>> failed(ResponseStatusException exception) {
-        return ResponseEntity.status(exception.getStatusCode()).body(Map.of("message", exception.getReason()));
     }
 
     @PatchMapping("/{id}/toggle-pause")

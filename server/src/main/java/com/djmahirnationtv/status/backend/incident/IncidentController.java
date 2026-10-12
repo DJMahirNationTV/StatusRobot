@@ -3,7 +3,6 @@ package com.djmahirnationtv.status.backend.incident;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -75,8 +74,4 @@ public class IncidentController {
         return ResponseEntity.status(409).body(Map.of("message", "This incident changed. Refresh before trying again."));
     }
 
-    @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<Map<String, String>> failed(ResponseStatusException exception) {
-        return ResponseEntity.status(exception.getStatusCode()).body(Map.of("message", exception.getReason()));
-    }
 }

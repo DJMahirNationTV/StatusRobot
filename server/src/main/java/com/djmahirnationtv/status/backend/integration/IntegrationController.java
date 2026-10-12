@@ -8,7 +8,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 import java.util.Map;
 
@@ -56,8 +55,4 @@ public class IntegrationController {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, String> invalid() { return Map.of("message", "Enter a name that is 80 Characters."); }
 
-    @ExceptionHandler(ResponseStatusException.class)
-    public org.springframework.http.ResponseEntity<Map<String, String>> failed(ResponseStatusException exception) {
-        return org.springframework.http.ResponseEntity.status(exception.getStatusCode()).body(Map.of("message", exception.getReason()));
-    }
 }
