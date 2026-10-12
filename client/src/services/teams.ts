@@ -19,6 +19,18 @@ export interface TeamListing {
   invitations: { id: number; email: string; role: TeamRole }[]
 }
 
+export function findWorkspace(workspaces: Workspace[], id: number | null) {
+  return workspaces.find(item => id === null ? item.role === 'OWNER' : item.id === id)
+}
+
+export function canEditWorkspace(workspace: Workspace | undefined | null) {
+  return workspace?.role === 'OWNER' || workspace?.role === 'EDITOR'
+}
+
+export function workspaceQuery(id: number | null) {
+  return id === null ? '' : `?workspace=${id}`
+}
+
 function request(path = '', method = 'GET', data?: { email?: string; role: TeamRole }) {
   return requestApi(`/team-members${path}`, method, data, { fallback: 'Could not update the team. Refresh and try again.' })
 }

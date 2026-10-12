@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite'
 
 let vite, server, http, api, authApi, csrfHeaders, origin
 let monitorApi, incidentApi, integrationApi, maintenanceApi, statusPageApi, teamApi
+let findWorkspace, canEditWorkspace, workspaceQuery
 let requests = []
 let configs = []
 let nextReply = null
@@ -54,7 +55,7 @@ before(async () => {
   ;({ integrationApi } = await vite.ssrLoadModule('/src/services/integrations.ts'))
   ;({ maintenanceApi } = await vite.ssrLoadModule('/src/services/maintenance.ts'))
   ;({ statusPageApi } = await vite.ssrLoadModule('/src/services/statusPages.ts'))
-  ;({ teamApi } = await vite.ssrLoadModule('/src/services/teams.ts'))
+  ;({ teamApi, findWorkspace, canEditWorkspace, workspaceQuery } = await vite.ssrLoadModule('/src/services/teams.ts'))
   http.defaults.baseURL = `${origin}/api`
   http.interceptors.request.use(config => { configs.push(config); return config })
 })
@@ -284,4 +285,36 @@ test('a non-JSON 401 still returns to login', async () => {
   nextReply = { path: '/api/maintenance/mine', status: 401, html: '<html>Sign in</html>' }
   await assert.rejects(maintenanceApi.list(), /Your session expired/)
   assert.equal(window.location.hash, '#login')
+})
+
+test('incident and maintenance lists send the selected workspace', async () => {
+  requests = []
+  await incidentApi.list('open', 1, 9)
+  await maintenanceApi.list(1, 9)
+  assert.equal(requests[0].query.get('workspaceId'), '9')
+  assert.equal(requests[0].query.get('status'), 'open')
+  assert.equal(requests[1].query.get('workspaceId'), '9')
+  assert.equal(requests[1].query.get('page'), '1')
+})
+
+test('maintenance creation includes the workspace without trusting it during editing', async () => {
+  const input = { title: 'Work', description: '', startsAt: '2030-01-01T10:00:00Z', endsAt: '2030-01-01T11:00:00Z', monitorIds: [7], published: false }
+  requests = []
+  await maintenanceApi.save(null, input, 9)
+  assert.equal(requests[1].query.get('workspaceId'), '9')
+  await maintenanceApi.save(7, input, 99)
+  assert.equal(requests[3].path, '/api/maintenance/7')
+  assert.equal(requests[3].query.has('workspaceId'), false)
+})
+
+test('workspace helpers keep missing workspaces and viewers read-only', () => {
+  const workspaces = [
+    { id: 1, role: 'OWNER' }, { id: 9, role: 'EDITOR' }, { id: 10, role: 'VIEWER' },
+  ]
+  assert.equal(findWorkspace(workspaces, null).id, 1)
+  assert.equal(canEditWorkspace(findWorkspace(workspaces, 9)), true)
+  assert.equal(canEditWorkspace(findWorkspace(workspaces, 10)), false)
+  assert.equal(canEditWorkspace(findWorkspace(workspaces, 999)), false)
+  assert.equal(workspaceQuery(null), '')
+  assert.equal(workspaceQuery(9), '?workspace=9')
 })

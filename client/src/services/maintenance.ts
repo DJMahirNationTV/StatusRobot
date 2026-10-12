@@ -14,6 +14,7 @@ export interface PublicMaintenance {
   monitorIds: number[]
 }
 export interface Maintenance extends PublicMaintenance {
+  workspaceId: number
   published: boolean
   createdAt: string
 }
@@ -37,14 +38,17 @@ function request(path: string, method = 'GET', data?: unknown) {
 }
 
 export const maintenanceApi = {
-  async list(page = 0): Promise<MaintenanceListing> {
-    return (await request(`/mine?page=${page}`)).data
+  async list(page = 0, workspaceId: number | null = null): Promise<MaintenanceListing> {
+    const params = new URLSearchParams({ page: String(page) })
+    if (workspaceId !== null) params.set('workspaceId', String(workspaceId))
+    return (await request(`/mine?${params}`)).data
   },
   async get(id: number): Promise<Maintenance> {
     return (await request(`/${id}`)).data
   },
-  async save(id: number | null, input: MaintenanceInput): Promise<Maintenance> {
-    return (await request(id === null ? '' : `/${id}`, id === null ? 'POST' : 'PUT', input)).data
+  async save(id: number | null, input: MaintenanceInput, workspaceId: number | null = null): Promise<Maintenance> {
+    const path = id === null ? (workspaceId === null ? '' : `?workspaceId=${workspaceId}`) : `/${id}`
+    return (await request(path, id === null ? 'POST' : 'PUT', input)).data
   },
   async cancel(id: number): Promise<Maintenance> {
     return (await request(`/${id}/cancel`, 'PATCH')).data

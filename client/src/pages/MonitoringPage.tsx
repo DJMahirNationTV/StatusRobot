@@ -11,9 +11,10 @@ import {
 } from 'lucide-react'
 import { monitorApi } from '../services/monitors'
 import type { Monitor } from '../types/monitor'
-import { teamApi } from '../services/teams'
+import { teamApi, findWorkspace, canEditWorkspace } from '../services/teams'
 import type { Workspace } from '../services/teams'
 import { MonitorHistoryPanel } from '../components/MonitorHistoryPanel'
+import { WorkspacePicker } from '../components/WorkspacePicker'
 
 export function MonitoringPage({ workspaceId }: { workspaceId: number | null }) {
   const [monitors, setMonitors] = useState<Monitor[]>([])
@@ -27,8 +28,8 @@ export function MonitoringPage({ workspaceId }: { workspaceId: number | null }) 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [historyId, setHistoryId] = useState<number | null>(null)
   const [historyRefresh, setHistoryRefresh] = useState(0)
-  const workspace = workspaces.find(item => workspaceId === null ? item.role === 'OWNER' : item.id === workspaceId)
-  const canEdit = workspace?.role === 'OWNER' || workspace?.role === 'EDITOR'
+  const workspace = findWorkspace(workspaces, workspaceId)
+  const canEdit = canEditWorkspace(workspace)
   const workspaceQuery = workspaceId === null ? '' : `?workspace=${workspaceId}`
 
   useEffect(() => {
@@ -134,17 +135,7 @@ export function MonitoringPage({ workspaceId }: { workspaceId: number | null }) 
           New monitor
         </a>}
       </header>
-      {workspaces.length > 0 && (
-        <div className="mb-6 flex flex-wrap items-center gap-3">
-          <label className="text-xs text-muted">Workspace
-            <select value={workspace?.id ?? ''} onChange={event => { window.location.hash = `#dashboard/monitoring/?workspace=${event.target.value}` }}
-              className="form-input mt-2 sm:ml-3 sm:mt-0 sm:inline-block sm:w-auto">
-              {workspaces.map(item => <option key={item.id} value={item.id}>{item.role === 'OWNER' ? 'My monitors' : item.email}</option>)}
-            </select>
-          </label>
-          {workspace && workspace.role !== 'OWNER' && <span className="rounded-lg bg-sage px-3 py-2 text-xs text-green">{workspace.role === 'EDITOR' ? 'Editor access' : 'Viewer access'}</span>}
-        </div>
-      )}
+      <WorkspacePicker workspaces={workspaces} workspaceId={workspaceId} page="#dashboard/monitoring/" ownLabel="My monitors" disabled={busy} />
       {error && (
         <p role="alert" className="dashboard-error mb-5">
           {error}

@@ -20,6 +20,7 @@ export interface PublicIncident {
 }
 
 export interface Incident extends PublicIncident {
+  workspaceId: number
   monitorName: string
   cause: string
   manual: boolean
@@ -41,8 +42,10 @@ async function request(path: string, method = 'GET', data?: unknown) {
 }
 
 export const incidentApi = {
-  list(status: IncidentFilter = 'all', page = 0): Promise<IncidentListing> {
-    return request(`?${new URLSearchParams({ status, page: String(page) })}`)
+  list(status: IncidentFilter = 'all', page = 0, workspaceId: number | null = null): Promise<IncidentListing> {
+    const params = new URLSearchParams({ status, page: String(page) })
+    if (workspaceId !== null) params.set('workspaceId', String(workspaceId))
+    return request(`?${params}`)
   },
   get(id: number): Promise<Incident> {
     return request(`/${id}`)
