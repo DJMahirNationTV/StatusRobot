@@ -1,6 +1,7 @@
 package com.djmahirnationtv.status.backend.maintenance;
 
 import com.djmahirnationtv.status.backend.monitor.repository.MonitorRepository;
+import com.djmahirnationtv.status.backend.team.TeamService;
 import jakarta.validation.constraints.*;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -18,10 +19,12 @@ import java.util.List;
 public class MaintenanceService {
     private final MaintenanceRepository windows;
     private final MonitorRepository monitors;
+    private final TeamService teams;
 
-    public MaintenanceService(MaintenanceRepository windows, MonitorRepository monitors) {
+    public MaintenanceService(MaintenanceRepository windows, MonitorRepository monitors, TeamService teams) {
         this.windows = windows;
         this.monitors = monitors;
+        this.teams = teams;
     }
 
     public record SaveRequest(@NotBlank @Size(max = 100) String title, @Size(max = 3000) String description,
@@ -30,13 +33,19 @@ public class MaintenanceService {
                               boolean published) {}
     public record PublicationRequest(@NotNull Boolean published) {}
     public record Response(Long id, String title, String description, Instant startsAt, Instant endsAt,
-                           Maintenance.Status status, boolean published, List<Long> monitorIds, Instant createdAt) {}
+                           Maintenance.Status status, boolean published, List<Long> monitorIds, Instant createdAt, Long workspaceId) {}
     public record Listing(List<Response> maintenance, int page, int totalPages, long totalElements) {}
     public record PublicNotice(Long id, String title, String description, Instant startsAt, Instant endsAt,
                                Maintenance.Status status, List<Long> monitorIds) {}
 
     @Transactional(readOnly = true)
-    public Listing mine(Long ownerId, int page) {
+    public Listing mine(Long userId, int page) {
+        return mine(userId, page, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Listing mine(Long userId, int page, Long workspaceId) {
+        Long ownerId = teams.workspaceOwner(workspaceId, userId, false);
         if (page < 0 || page > 100_000) throw badRequest("Choose a valid page number.");
         var paging = PageRequest.of(page, 20, Sort.by(Sort.Direction.DESC, "startsAt", "id"));
         var result = windows.findByOwnerId(ownerId, paging);
@@ -46,12 +55,18 @@ public class MaintenanceService {
     }
 
     @Transactional(readOnly = true)
-    public Response get(Long id, Long ownerId) { return response(owned(id, ownerId), Instant.now()); } // only the owner can view the details of a maintenance
+    public Response get(Long id, Long userId) { return response(accessible(id, userId, false), Instant.now()); }
 
     @Transactional
-    public Response save(Long id, SaveRequest input, Long ownerId) {
+    public Response save(Long id, SaveRequest input, Long userId) {
+        return save(id, input, userId, null);
+    }
+
+    @Transactional
+    public Response save(Long id, SaveRequest input, Long userId, Long workspaceId) {
         Instant now = Instant.now();
-        Maintenance window = id == null ? new Maintenance(ownerId) : owned(id, ownerId);
+        Maintenance window = id == null ? new Maintenance(teams.workspaceOwner(workspaceId, userId, true)) : accessible(id, userId, true);
+        Long ownerId = window.getOwnerId();
         if (id != null && window.statusAt(now) != Maintenance.Status.SCHEDULED) {
             throw conflict("Only upcoming maintenance can be edited. Cancel ongoing maintenance instead.");
         }
@@ -59,9 +74,9 @@ public class MaintenanceService {
         if (!input.endsAt().isAfter(input.startsAt())) throw badRequest("The end time must be after the start time.");
 
         var selected = monitors.findAllById(input.monitorIds());
-        if (selected.size() != input.monitorIds().size()) throw badRequest("Select between 1 and 30 different monitors from your account.");
+        if (selected.size() != input.monitorIds().size()) throw badRequest("Select between 1 and 30 different monitors from this workspace.");
         for (var monitor : selected) {
-            if (!ownerId.equals(monitor.getOwnerId())) throw badRequest("Select monitors from your own account.");
+            if (!ownerId.equals(monitor.getOwnerId())) throw badRequest("Select monitors from the same workspace.");
         }
         window.setTitle(input.title().strip());
         window.setDescription(input.description() ==null ? "" : input.description().strip()); // description is optional so we allow null and convert it to an empty string
@@ -74,8 +89,8 @@ public class MaintenanceService {
     }
 
     @Transactional
-    public Response cancel(Long id, Long ownerId) {
-        Maintenance window = owned(id, ownerId);
+    public Response cancel(Long id, Long userId) {
+        Maintenance window = accessible(id, userId, true);
         Instant now = Instant.now();
         if (window.statusAt(now) == Maintenance.Status.COMPLETED) throw conflict("Completed maintenance cannot be cancelled.");
         window.setCancelled(true);
@@ -83,15 +98,15 @@ public class MaintenanceService {
     }
 
     @Transactional
-    public Response publish(Long id, PublicationRequest input, Long ownerId) {
-        Maintenance window = owned(id, ownerId);
+    public Response publish(Long id, PublicationRequest input, Long userId) {
+        Maintenance window = accessible(id, userId, true);
         window.setPublished(input.published());
         return response(windows.saveAndFlush(window), Instant.now());
     }
 
     @Transactional
-    public void delete(Long id, Long ownerId) {
-        Maintenance window = owned(id, ownerId);
+    public void delete(Long id, Long userId) {
+        Maintenance window = accessible(id, userId, true);
         if (window.statusAt(Instant.now()) == Maintenance.Status.IN_PROGRESS) {
             throw conflict("Cancel ongoing maintenance before deleting it.");
         }
@@ -133,15 +148,17 @@ public class MaintenanceService {
         windows.flush();
     }
 
-    private Maintenance owned(Long id, Long ownerId) {
-        return windows.findByIdAndOwnerId(id, ownerId)
+    private Maintenance accessible(Long id, Long userId, boolean editing) {
+        Maintenance window = windows.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Maintenance was not found."));
+        teams.requireAccess(window.getOwnerId(), userId, editing);
+        return window;
     }
 
     private Response response(Maintenance window, Instant now) {
         return new Response(window.getId(), window.getTitle(), window.getDescription(), window.getStartsAt(),
                 window.getEndsAt(), window.statusAt(now), window.isPublished(),
-                window.getMonitors().stream().map(monitor -> monitor.getId()).sorted().toList(), window.getCreatedAt());
+                window.getMonitors().stream().map(monitor -> monitor.getId()).sorted().toList(), window.getCreatedAt(), window.getOwnerId());
     }
 
     private ResponseStatusException badRequest(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }

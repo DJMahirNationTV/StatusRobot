@@ -36,7 +36,7 @@ class IncidentAnalysisServiceTests {
         return new IncidentService.IncidentResponse(1L, 2L, "Private monitor", "HTTP check returned 503.",
                 Instant.parse("2026-10-07T08:00:00Z"), null, "Private title", false, false,
                 Incident.Stage.INVESTIGATING, List.of(new IncidentService.UpdateResponse(
-                Incident.Stage.INVESTIGATING, "Private note with secret", Instant.now())));
+                Incident.Stage.INVESTIGATING, "Private note with secret", Instant.now())), 1L);
     }
 
     @Test

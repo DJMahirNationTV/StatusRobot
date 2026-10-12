@@ -19,8 +19,9 @@ public class MaintenanceController {
     public MaintenanceController(MaintenanceService maintenance) { this.maintenance = maintenance; }
 
     @GetMapping("/mine")
-    public MaintenanceService.Listing mine(Authentication auth, @RequestParam(defaultValue = "0") int page) {
-        return maintenance.mine(Long.valueOf(auth.getName()), page);
+    public MaintenanceService.Listing mine(Authentication auth, @RequestParam(defaultValue = "0") int page,
+                                         @RequestParam(required = false) Long workspaceId) {
+        return maintenance.mine(Long.valueOf(auth.getName()), page, workspaceId);
     }
 
     @GetMapping("/{id}")
@@ -30,8 +31,9 @@ public class MaintenanceController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public MaintenanceService.Response create(@Valid @RequestBody MaintenanceService.SaveRequest input, Authentication auth) {
-        return maintenance.save(null, input, Long.valueOf(auth.getName()));
+    public MaintenanceService.Response create(@Valid @RequestBody MaintenanceService.SaveRequest input, Authentication auth,
+                                             @RequestParam(required = false) Long workspaceId) {
+        return maintenance.save(null, input, Long.valueOf(auth.getName()), workspaceId);
     }
 
     @PutMapping("/{id}")

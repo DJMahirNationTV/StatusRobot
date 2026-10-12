@@ -84,7 +84,7 @@ public class Incident {
     }
 
     public static Incident manual(Long ownerId, Long monitorId, String monitorName, String title, String message) {
-        var incident = new Incident(ownerId, monitorId, monitorName, "Reported by the monitor owner.", Instant.now());
+        var incident = new Incident(ownerId, monitorId, monitorName, "Reported by a workspace member.", Instant.now());
         incident.manual = true;
         incident.openMonitorId = null;
         incident.title = title;

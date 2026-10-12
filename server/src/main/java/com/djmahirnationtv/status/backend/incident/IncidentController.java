@@ -23,8 +23,9 @@ public class IncidentController {
 
     @GetMapping
     public IncidentService.Listing mine(Authentication auth, @RequestParam(defaultValue = "all") String status,
-                                        @RequestParam(defaultValue = "0") int page) {
-        return incidents.mine(Long.valueOf(auth.getName()), status, page);
+                                        @RequestParam(defaultValue = "0") int page,
+                                        @RequestParam(required = false) Long workspaceId) {
+        return incidents.mine(Long.valueOf(auth.getName()), status, page, workspaceId);
     }
 
     @GetMapping("/{id}")
@@ -42,8 +43,9 @@ public class IncidentController {
     @PostMapping("/{id}/analysis")
     public IncidentAnalysisService.Analysis analyze(@PathVariable Long id, @Valid @RequestBody AnalysisRequest input,
                                                     Authentication auth) {
-        Long ownerId = Long.valueOf(auth.getName());
-        return analysis.analyze(incidents.get(id, ownerId), ownerId, input.consent(), input.context());
+        Long userId = Long.valueOf(auth.getName());
+        // Analysis needs Editor access. Limits count the account making the request.
+        return analysis.analyze(incidents.get(id, userId, true), userId, input.consent(), input.context());
     }
 
     @PostMapping
