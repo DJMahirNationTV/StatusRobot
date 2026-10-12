@@ -1,4 +1,4 @@
-import { API_BASE } from './api'
+import { http, requestError } from './api'
 import { csrfHeaders } from './auth'
 
 export type MaintenanceStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
@@ -35,44 +35,28 @@ export interface MaintenanceListing {
 
 async function request(path: string, method = 'GET', data?: unknown) {
   const headers = method === 'GET' ? {} : await csrfHeaders()
-  let response: Response
   try {
-    response = await fetch(`${API_BASE}/maintenance${path}`, {
-      method,
-      credentials: 'include',
-      headers: { ...headers, ...(data ? { 'Content-Type': 'application/json' } : {}) },
-      body: data ? JSON.stringify(data) : undefined,
-      signal: AbortSignal.timeout(15000),
-    })
-  } catch {
-    throw new Error('Could not reach the server. Please try again.')
+    return await http.request({ url: `/maintenance${path}`, method, headers, data })
+  } catch (error) {
+    throw requestError(error, 'Could not save this change. Refresh and try again.', true)
   }
-  if (response.status === 401) {
-    window.location.hash = '#login'
-    throw new Error('Your session expired. Please sign in again.')
-  }
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(body?.message || 'Could not save this change. Refresh and try again.')
-  }
-  return response
 }
 
 export const maintenanceApi = {
   async list(page = 0): Promise<MaintenanceListing> {
-    return (await request(`/mine?page=${page}`)).json()
+    return (await request(`/mine?page=${page}`)).data
   },
   async get(id: number): Promise<Maintenance> {
-    return (await request(`/${id}`)).json()
+    return (await request(`/${id}`)).data
   },
   async save(id: number | null, input: MaintenanceInput): Promise<Maintenance> {
-    return (await request(id === null ? '' : `/${id}`, id === null ? 'POST' : 'PUT', input)).json()
+    return (await request(id === null ? '' : `/${id}`, id === null ? 'POST' : 'PUT', input)).data
   },
   async cancel(id: number): Promise<Maintenance> {
-    return (await request(`/${id}/cancel`, 'PATCH')).json()
+    return (await request(`/${id}/cancel`, 'PATCH')).data
   },
   async publish(id: number, published: boolean): Promise<Maintenance> {
-    return (await request(`/${id}/publication`, 'PATCH', { published })).json()
+    return (await request(`/${id}/publication`, 'PATCH', { published })).data
   },
   async remove(id: number) {
     await request(`/${id}`, 'DELETE')

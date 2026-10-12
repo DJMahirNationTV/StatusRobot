@@ -1,4 +1,4 @@
-import { API_BASE } from './api'
+import { http, requestError } from './api'
 import { csrfHeaders } from './auth'
 
 export type TeamRole = 'VIEWER' | 'EDITOR'
@@ -22,29 +22,16 @@ export interface TeamListing {
 
 async function request(path = '', method = 'GET', data?: { email?: string; role: TeamRole }) {
   const headers = method === 'GET' ? {} : await csrfHeaders()
-  let response: Response
   try {
-    response = await fetch(`${API_BASE}/team-members${path}`, {
-      method,
-      credentials: 'include',
-      headers: { ...headers, ...(data ? { 'Content-Type': 'application/json' } : {}) },
-      body: data ? JSON.stringify(data) : undefined,
-      signal: AbortSignal.timeout(15000),
-    })
-  } catch {
-    throw new Error('Could not reach the server. Please try again.')
+    return await http.request({ url: `/team-members${path}`, method, headers, data })
+  } catch (error) {
+    throw requestError(error, 'Could not update the team. Refresh and try again.', true)
   }
-  if (response.status === 401) window.location.hash = '#login'
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(body?.message || 'Could not update the team. Refresh and try again.')
-  }
-  return response
 }
 
 export const teamApi = {
   async list(): Promise<TeamListing> {
-    return (await request()).json()
+    return (await request()).data
   },
   async invite(email: string, role: TeamRole) {
     await request('', 'POST', { email, role })

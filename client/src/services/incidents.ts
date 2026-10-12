@@ -1,4 +1,4 @@
-import { API_BASE } from './api'
+import { http, requestError } from './api'
 import { csrfHeaders } from './auth'
 
 export type IncidentStage = 'INVESTIGATING' | 'IDENTIFIED' | 'MONITORING' | 'RESOLVED'
@@ -38,27 +38,15 @@ export interface IncidentListing {
 
 async function request(path: string, method = 'GET', data?: unknown) {
   const headers = method === 'GET' ? {} : await csrfHeaders()
-  let response: Response
   try {
-    response = await fetch(`${API_BASE}/incidents${path}`, {
-      credentials: 'include',
-      method,
-      headers: { ...headers, ...(data ? { 'Content-Type': 'application/json' } : {}) },
-      body: data ? JSON.stringify(data) : undefined,
-      signal: AbortSignal.timeout(30000),
+    const response = await http.request({
+      url: `/incidents${path}`, method, headers, data,
+      timeout: 30000, // Incident help can take longer than normal requests.
     })
-  } catch {
-    throw new Error('Could not reach the server. Please try again.')
+    return response.data
+  } catch (error) {
+    throw requestError(error, 'Could not complete this request. Please try again.', true)
   }
-  if (response.status === 401) {
-    window.location.hash = '#login'
-    throw new Error('Your session expired. Please sign in again.')
-  }
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(body?.message || 'Could not complete this request. Please try again.')
-  }
-  return response.json()
 }
 
 export const incidentApi = {

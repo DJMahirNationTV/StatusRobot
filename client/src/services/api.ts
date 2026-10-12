@@ -1,29 +1,63 @@
-import type {Monitor, MonitorStats, PingLog} from '../types/monitor';
-import type { MonitorHistory } from '../types/history';
+import axios from 'axios'
+import type { Monitor, MonitorStats, PingLog } from '../types/monitor'
+import type { MonitorHistory } from '../types/history'
 
-export const API_BASE = import.meta.env.VITE_API_URL || '/api';
+export const API_BASE = import.meta.env.VITE_API_URL || '/api'
+
+export const http = axios.create({
+  baseURL: API_BASE,
+  timeout: 15000,
+  responseType: 'json',
+  transitional: { silentJSONParsing: false }, // Report invalid JSON instead of accepting it as text.
+  withCredentials: true, // Send the session cookie with API requests.
+  withXSRFToken: false, // We get the CSRF header from /auth/csrf ourselves.
+})
+
+export function requestError(error: unknown, fallback: string, redirectToLogin = false) {
+  if (axios.isAxiosError<{ message?: string }>(error)) {
+    if (redirectToLogin && error.response?.status === 401) {
+      window.location.hash = '#login'
+      return new Error('Your session expired. Please sign in again.')
+    }
+    if (!error.response) return new Error(error.code === 'ERR_BAD_RESPONSE'
+      ? fallback : 'Could not reach the server. Please try again.')
+    const message = error.response.data?.message
+    if (typeof message === 'string' && message.trim()) return new Error(message)
+  }
+  return new Error(fallback)
+}
 
 export const api = {
   async getHistory(monitorId: number, hours = 24): Promise<MonitorHistory> {
-    const res = await fetch(`${API_BASE}/monitors/${monitorId}/history?hours=${hours}`, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) throw new Error('History is temporarily unavailable.');
-    return res.json();
+    try {
+      const response = await http.get<MonitorHistory>(`/monitors/${monitorId}/history`, { params: { hours } })
+      return response.data
+    } catch (error) {
+      throw requestError(error, 'History is temporarily unavailable.')
+    }
   },
   async getMonitors(): Promise<Monitor[]> {
-    const res = await fetch(`${API_BASE}/monitors`, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) throw new Error('Error on loading Monitors');
-    return res.json();
+    try {
+      const response = await http.get<Monitor[]>('/monitors')
+      return response.data
+    } catch (error) {
+      throw requestError(error, 'Error on loading Monitors')
+    }
   },
-
   async getStats(monitorId: number): Promise<MonitorStats> {
-    const res = await fetch(`${API_BASE}/monitors/${monitorId}/stats`);
-    if (!res.ok) throw new Error('Error on loading the Statistics');
-    return res.json();
+    try {
+      const response = await http.get<MonitorStats>(`/monitors/${monitorId}/stats`)
+      return response.data
+    } catch (error) {
+      throw requestError(error, 'Error on loading the Statistics')
+    }
   },
-
   async getRecentPings(monitorId: number, limit = 30): Promise<PingLog[]> {
-    const res = await fetch(`${API_BASE}/monitors/${monitorId}/pings?limit=${limit}`, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) throw new Error('Error on loading the Pings');
-    return res.json();
-  }
-};
+    try {
+      const response = await http.get<PingLog[]>(`/monitors/${monitorId}/pings`, { params: { limit } })
+      return response.data
+    } catch (error) {
+      throw requestError(error, 'Error on loading the Pings')
+    }
+  },
+}

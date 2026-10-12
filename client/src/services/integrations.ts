@@ -1,4 +1,4 @@
-import { API_BASE } from './api'
+import { http, requestError } from './api'
 import { csrfHeaders } from './auth'
 
 export interface Integration {
@@ -16,37 +16,19 @@ async function request(
   data?: { name: string; webhookUrl: string }
 ) {
   const headers = method === 'GET' ? {} : await csrfHeaders()
-  let response: Response
   try {
-    response = await fetch(`${API_BASE}/integrations${path}`, {
-      method,
-      credentials: 'include',
-      headers: {
-        ...headers,
-        ...(data ? { 'Content-Type': 'application/json' } : {})
-      },
-      body: data ? JSON.stringify(data) : undefined,
-      signal: AbortSignal.timeout(15000)
-    })
-  } catch {
-    throw new Error('Could not reach the server. Please try again.')
+    return await http.request({ url: `/integrations${path}`, method, headers, data })
+  } catch (error) {
+    throw requestError(error, 'Could not complete this request. Refresh and try again.', true)
   }
-  if (response.status === 401) window.location.hash = '#login'
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(
-      body?.message || 'Could not complete this request. Refresh and try again.'
-    )
-  }
-  return response
 }
 
 export const integrationApi = {
   async list(): Promise<IntegrationListing> {
-    return (await request('')).json()
+    return (await request('')).data
   },
   async selected(monitorId: number): Promise<number[]> {
-    return (await request(`/monitors/${monitorId}`)).json()
+    return (await request(`/monitors/${monitorId}`)).data
   },
   async save(
     id: number | null,
@@ -58,7 +40,7 @@ export const integrationApi = {
         name,
         webhookUrl
       })
-    ).json()
+    ).data
   },
   async remove(id: number) {
     await request(`/${id}`, 'DELETE')

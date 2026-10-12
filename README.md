@@ -18,6 +18,8 @@ StatusRobot is an open-source, self-hosted uptime monitoring application for web
 
 The frontend uses React, TypeScript and Tailwind CSS. The backend uses Java and Spring Boot, with MySQL for accounts and configuration and MongoDB for monitoring history.
 
+Client API requests use Axios. The shared instance in `client/src/services/api.ts` sets the API address, timeout and session-cookie setting. Each service sends its request and returns `response.data`, which Axios has already read as JSON. Write requests still get a fresh CSRF token from `/api/auth/csrf`. Authentication uses a 10-second timeout, normal requests use 15 seconds and incident requests use 30 seconds. Failed requests are not retried automatically.
+
 ## Requirements
 
 - Git
@@ -304,10 +306,13 @@ From `client`:
 
 ```powershell
 npm run lint
+npm test
 npm run build
 ```
 
 The backend build produces `server/target/app.jar`. The frontend build produces `client/dist`.
+
+The client tests use a temporary local server with test data. They check API paths, request bodies, CSRF headers, error messages and timeouts without using your databases, Discord webhooks or OpenAI account.
 
 ## Docker and deployment
 
