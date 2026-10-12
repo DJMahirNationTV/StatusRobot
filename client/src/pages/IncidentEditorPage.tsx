@@ -3,8 +3,10 @@ import { ChevronLeft } from 'lucide-react'
 import { incidentApi } from '../services/incidents'
 import { monitorApi } from '../services/monitors'
 import type { Monitor } from '../types/monitor'
+import { teamApi, findWorkspace, canEditWorkspace, workspaceQuery } from '../services/teams'
 
-export function IncidentEditorPage() {
+export function IncidentEditorPage({ workspaceId }: { workspaceId: number | null }) {
+  const query = workspaceQuery(workspaceId)
   const [monitors, setMonitors] = useState<Monitor[] | null>(null)
   const [monitorId, setMonitorId] = useState('')
   const [title, setTitle] = useState('')
@@ -15,10 +17,13 @@ export function IncidentEditorPage() {
 
   useEffect(() => {
     let active = true
-    monitorApi.list().then(list => { if (active) setMonitors(list) })
+    Promise.all([monitorApi.list(workspaceId), teamApi.list()]).then(([list, team]) => {
+      if (!canEditWorkspace(findWorkspace(team.workspaces, workspaceId))) throw new Error('You need Editor access to create incidents in this workspace.')
+      if (active) setMonitors(list)
+    })
       .catch(exception => { if (active) setError(exception.message) })
     return () => { active = false }
-  }, [attempt])
+  }, [attempt, workspaceId])
 
   async function create(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -27,7 +32,7 @@ export function IncidentEditorPage() {
     setError('')
     try {
       const incident = await incidentApi.create({ monitorId: Number(monitorId), title: title.trim(), message: message.trim() })
-      window.location.hash = `#dashboard/incidents/${incident.id}/`
+      window.location.hash = `#dashboard/incidents/${incident.id}/${query}`
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Could not create this incident.')
     } finally {
@@ -37,15 +42,15 @@ export function IncidentEditorPage() {
 
   return (
     <div className="max-w-3xl">
-      <a href="#dashboard/incidents/" className="dashboard-action mb-6"><ChevronLeft size={14} />Incidents</a>
+      <a href={`#dashboard/incidents/${query}`} className="dashboard-action mb-6"><ChevronLeft size={14} />Incidents</a>
       <h1 className="dashboard-heading mb-7">Add an incident<span className="text-green">.</span></h1>
       {error && <p role="alert" className="dashboard-error mb-5">{error}
         {!monitors && <button className="ml-3 underline" onClick={() => { setError(''); setAttempt(value => value + 1) }}>Retry</button>}
       </p>}
-      {!monitors && !error && <p role="status" className="text-sm text-muted">Loading your monitors...</p>}
+      {!monitors && !error && <p role="status" className="text-sm text-muted">Loading monitors...</p>}
       {monitors?.length === 0 && <div className="dashboard-panel p-6">
         <p className="text-sm text-muted">Add a monitor before creating an incident.</p>
-        <a href="#dashboard/monitoring/new/" className="button button-green mt-5">Add a monitor</a>
+        <a href={`#dashboard/monitoring/new/${query}`} className="button button-green mt-5">Add a monitor</a>
       </div>}
       {monitors && monitors.length > 0 && <form onSubmit={create} className="dashboard-panel space-y-6 p-6">
         <fieldset disabled={busy} className="space-y-5">

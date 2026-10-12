@@ -120,7 +120,7 @@ export function TeamMembersPage() {
                 <button className="button button-green py-3" type="submit">{busy ? 'Please wait...' : 'Send invitation'}</button>
               </fieldset>
             </form>
-            <p className="mt-4 text-xs leading-6 text-muted">Viewers can browse your monitors. Editors can create, edit, pause and delete monitors, including their history. Only you can manage the team.</p>
+            <p className="mt-4 text-xs leading-6 text-muted">Viewers can read monitors, incidents and maintenance. Editors can manage them and publish incident updates and maintenance notices. Only you can manage the team.</p>
           </section>
           <section className="dashboard-panel overflow-hidden" aria-label="Your team">
             <div className="flex items-center gap-3 border-b border-line p-5">

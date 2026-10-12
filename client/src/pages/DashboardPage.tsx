@@ -21,6 +21,7 @@ import { IncidentEditorPage } from './IncidentEditorPage'
 import { TeamMembersPage } from './TeamMembersPage'
 import { MaintenancePage } from './MaintenancePage'
 import { MaintenanceEditorPage } from './MaintenanceEditorPage'
+import { workspaceQuery } from '../services/teams'
 
 interface DashboardPageProps {
   user: AuthUser | null
@@ -144,7 +145,7 @@ export function DashboardPage({
           {navigation.map(({ icon: Icon, label, href }) =>
               <a
                 key={label}
-                href={href}
+                href={href + (['#dashboard/monitoring/', '#dashboard/incidents/', '#dashboard/maintenance/'].includes(href) ? workspaceQuery(workspaceId) : '')}
                 aria-current={href === activeHref ? 'page' : undefined}
                 className={`sidebar-link ${href === activeHref ? 'bg-sage text-green' : 'hover:bg-sage'}`}
               >
@@ -194,12 +195,12 @@ export function DashboardPage({
             <TeamMembersPage key={user.id} />
           ) : maintenance ? (
             newMaintenance || maintenanceEdit
-              ? <MaintenanceEditorPage key={`${user.id}-${path}`} maintenanceId={maintenanceEdit ? Number(maintenanceEdit[1]) : null} />
-              : <MaintenancePage key={user.id} />
+              ? <MaintenanceEditorPage key={`${user.id}-${path}-${workspaceId}`} maintenanceId={maintenanceEdit ? Number(maintenanceEdit[1]) : null} workspaceId={workspaceId} />
+              : <MaintenancePage key={`${user.id}-${workspaceId}`} workspaceId={workspaceId} />
           ) : incidents ? (
-            newIncident ? <IncidentEditorPage key={user.id} />
+            newIncident ? <IncidentEditorPage key={`${user.id}-${workspaceId}`} workspaceId={workspaceId} />
               : incidentDetail ? <IncidentDetailsPage key={`${user.id}-${path}`} incidentId={Number(incidentDetail[1])} />
-              : <IncidentsPage key={user.id} />
+              : <IncidentsPage key={`${user.id}-${workspaceId}`} workspaceId={workspaceId} />
           ) : newMonitor || edit ? (
             <MonitorEditorPage
               key={`${user.id}-${path}-${workspaceId}`}
