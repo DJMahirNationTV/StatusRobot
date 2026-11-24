@@ -16,11 +16,25 @@ StatusRobot is an open-source, self-hosted uptime monitoring application for web
 - Invite existing accounts to share your monitors with Viewer or Editor access.
 - Schedule maintenance for selected monitors from the dashboard.
 
+## Preview
+
+| Monitor dashboard | Public status page |
+| --- | --- |
+| <img src="docs/images/admin_monitors.png" alt="StatusRobot monitor dashboard" width="480"> | <img src="docs/images/status_page_1.png" alt="Public StatusRobot status page" width="480"> |
+
+| Incident management | Maintenance scheduling |
+| --- | --- |
+| <img src="docs/images/admin_incidents.png" alt="StatusRobot incident management" width="480"> | <img src="docs/images/admin_maintenance.png" alt="StatusRobot maintenance scheduling" width="480"> |
+
+<p align="center"><a href="architecture.md"><img alt="Read the documentation" src="https://img.shields.io/badge/Read_the_docs-2ea44f?style=for-the-badge"></a></p>
+
 The frontend uses React, TypeScript and Tailwind CSS. The backend uses Java and Spring Boot, with MySQL for accounts and configuration and MongoDB for monitoring history.
 
 Client API requests use Axios. The shared instance in `client/src/services/api.ts` sets the API address, timeout and session-cookie setting. `requests.ts` handles the repeated dashboard requests, CSRF headers and errors. Each service returns `response.data`, which Axios has already read as JSON. Authentication uses a 10-second timeout, normal requests use 15 seconds and incident requests use 30 seconds. Failed requests are not retried automatically.
 
 For a code walkthrough with diagrams and practice questions, read [architecture.md](architecture.md). [exceldraw.md](exceldraw.md) contains diagrams you can copy into Excalidraw's Mermaid import.
+
+
 
 ## Requirements
 
