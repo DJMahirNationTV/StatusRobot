@@ -33,6 +33,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http, OAuthUserService oauthUsers,
             @Value("${app.frontend-url}") String frontendUrl) throws Exception {
         http
+                // C.DE: CORS regelt erlaubte Frontend-Ursprünge. CSRF verlangt bei Änderungen zusätzlich zum Session-Cookie einen Token.
                 .cors(Customizer.withDefaults())
                 .csrf(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
@@ -48,6 +49,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/monitors", "/api/monitors/*",
                                 "/api/monitors/*/pings", "/api/monitors/*/stats", "/api/monitors/*/history").permitAll()
                         .anyRequest().authenticated())
+                // C.DE: Spring Security verarbeitet den Login und die Session. Der Service prüft später die Workspace-Rechte.
                 .formLogin(form -> form
                         .loginProcessingUrl("/api/auth/login")
                         .loginPage(frontendUrl + "/#login")

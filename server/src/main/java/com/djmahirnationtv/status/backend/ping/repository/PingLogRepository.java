@@ -10,6 +10,9 @@ import java.time.Instant;
 
 @Repository
 public interface PingLogRepository extends MongoRepository<PingLog, String> {
+    // C.DE: MongoDB filtert die Logs eines Monitors und berechnet Tageswerte, Chart-Zeitgruppen und Summen in einer Abfrage.
+    // C.DE: $facet berechnet mehrere Auswertungen aus denselben Logs. ?0, ?1 usw. stehen für die Methodenparameter.
+    // C.DE: Die mittlere Antwortzeit nutzt erfolgreiche Checks, die Uptime zählt dagegen alle Checks und deren Erfolge.
     @Aggregation(pipeline = {
         "{ $match: { monitorId: ?0, timestamp: { $gte: ?1, $lte: ?2 } } }",
         """

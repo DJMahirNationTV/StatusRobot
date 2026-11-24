@@ -2,14 +2,16 @@ package com.djmahirnationtv.status.backend.statuspage;
 
 import com.djmahirnationtv.status.backend.auth.AppUser;
 import com.djmahirnationtv.status.backend.auth.UserRepository;
+import com.djmahirnationtv.status.backend.monitor.model.Monitor;
 import com.djmahirnationtv.status.backend.monitor.repository.MonitorRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.Comparator;
 import jakarta.validation.constraints.*;
 import com.djmahirnationtv.status.backend.monitor.dto.MonitorResponse;
@@ -39,23 +41,33 @@ public class StatusPageService {
 
     @Transactional(readOnly = true)
     public Listing mine(Long userId) {
-        return new Listing(canPin(userId, serverOwner()), pages.findByOwnerIdOrderByIdDesc(userId).stream()
-                .map(StatusPageResponse::from).toList());
+        List<StatusPageResponse> result = new ArrayList<>();
+        for (StatusPage page : pages.findByOwnerIdOrderByIdDesc(userId)) {
+            result.add(StatusPageResponse.from(page));
+        }
+        return new Listing(canPin(userId, serverOwner()), List.copyOf(result));
     }
 
     @Transactional(readOnly = true)
     public StatusPageResponse bySlug(String slug) {
-        return publicView(pages.findBySlug(slug).orElseThrow(() -> notFound()));
+        StatusPage page = pages.findBySlug(slug).orElse(null);
+        if (page == null) throw notFound();
+        return publicView(page);
     }
 
     @Transactional(readOnly = true)
     public StatusPageResponse defaultPage() {
-        return pages.findByDefaultSlot(1).map(this::publicView).orElse(null);
+        StatusPage page = pages.findByDefaultSlot(1).orElse(null);
+        return page == null ? null : publicView(page);
     }
 
     private StatusPageResponse publicView(StatusPage page) {
         var response = StatusPageResponse.from(page);
-        var monitorIds = response.monitors().stream().map(MonitorResponse::id).toList();
+        List<Long> monitorIds = new ArrayList<>();
+        for (MonitorResponse monitor : response.monitors()) {
+            monitorIds.add(monitor.id());
+        }
+        // C.DE: Öffentlich erscheinen nur veröffentlichte Meldungen für die ausgewählten Monitore dieses Workspaces.
         return new StatusPageResponse(response.id(), response.name(), response.slug(), response.description(),
                 response.pinnedDefault(), response.monitors(), incidents.publishedForPage(page.getOwnerId(), monitorIds),
                 maintenance.publishedForPage(page.getOwnerId(), monitorIds));
@@ -65,12 +77,12 @@ public class StatusPageService {
     public StatusPageResponse save(Long id, StatusPageRequest input, Long userId) {
         AppUser owner = lockSettings();
         StatusPage page = id == null ? new StatusPage() : owned(id, userId);
-        if (Set.of("mine", "default").contains(input.slug()) || pages.existsBySlugAndIdNot(input.slug(), id == null ? -1L : id))
+        long excludedId = id == null ? -1L : id;
+        if (input.slug().equals("mine") || input.slug().equals("default")
+                || pages.existsBySlugAndIdNot(input.slug(), excludedId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This page address is already in use. Choose another one.");
-        var selected = monitors.findAllById(input.monitorIds());
-        if (selected.size() != input.monitorIds().stream().distinct().count()
-                || selected.stream().anyMatch(m -> !userId.equals(m.getOwnerId())))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select monitors from your own account.");
+        }
+        List<Monitor> selected = selectedMonitors(input.monitorIds(), userId);
         page.setOwnerId(userId);
         page.setName(input.name().strip());
         page.setSlug(input.slug());
@@ -79,6 +91,20 @@ public class StatusPageService {
         page.getMonitors().addAll(selected);
         setDefault(page, input.pinnedDefault(), userId, owner);
         return StatusPageResponse.from(pages.saveAndFlush(page));
+    }
+
+    private List<Monitor> selectedMonitors(List<Long> ids, Long userId) {
+        List<Monitor> selected = monitors.findAllById(ids);
+        // C.DE: Doppelte IDs zählen nur einmal. Fehlende oder fremde Monitore dürfen nicht auf die Seite.
+        if (selected.size() != new HashSet<>(ids).size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select monitors from your own account.");
+        }
+        for (Monitor monitor : selected) {
+            if (!userId.equals(monitor.getOwnerId())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select monitors from your own account.");
+            }
+        }
+        return selected;
     }
 
     @Transactional
@@ -98,32 +124,41 @@ public class StatusPageService {
     }
 
     private void setDefault(StatusPage page, boolean pinned, Long userId, AppUser owner) {
-        if (pinned || page.isPinnedDefault() != pinned) {
-            if (!canPin(userId, owner)) denyPin();
+        if ((pinned || page.isPinnedDefault()) && !canPin(userId, owner)) {
+            denyPin();
         }
         if (pinned) {
-            pages.findByDefaultSlot(1).filter(old -> !old.getId().equals(page.getId())).ifPresent(old -> {
+            StatusPage old = pages.findByDefaultSlot(1).orElse(null);
+            if (old != null && !old.getId().equals(page.getId())) {
                 old.pinDefault(false);
+                // C.DE: Erst wird der alte Default-Platz freigegeben, danach kann die neue Seite ihn übernehmen.
                 pages.flush();
-            });
+            }
         }
         page.pinDefault(pinned);
     }
 
     private AppUser serverOwner() {
-        return (ownerEmail.isEmpty() ? users.findFirstByOrderByIdAsc() : users.findByEmail(ownerEmail)).orElse(null);
+        if (ownerEmail.isEmpty()) {
+            return users.findFirstByOrderByIdAsc().orElse(null);
+        }
+        return users.findByEmail(ownerEmail).orElse(null);
     }
 
     private AppUser lockSettings() {
         AppUser owner = serverOwner();
-        return owner == null ? null : users.lockForSettingsUpdate(owner.getId()).orElseThrow();
+        if (owner == null) return null;
+        // C.DE: Die Datenbanksperre verhindert, dass zwei gleichzeitige Änderungen mehrere Default-Seiten erzeugen.
+        return users.lockForSettingsUpdate(owner.getId()).orElseThrow();
     }
 
     private boolean canPin(Long userId, AppUser owner) { return owner != null && owner.getId().equals(userId); }
     private void denyPin() { throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the server owner can change the default page."); }
     private ResponseStatusException notFound() { return new ResponseStatusException(HttpStatus.NOT_FOUND, "Status page not found"); }
     private StatusPage owned(Long id, Long userId) {
-        return pages.findById(id).filter(page -> userId.equals(page.getOwnerId())).orElseThrow(() -> notFound());
+        StatusPage page = pages.findById(id).orElse(null);
+        if (page == null || !userId.equals(page.getOwnerId())) throw notFound();
+        return page;
     }
 
     public record StatusPageRequest(
@@ -137,10 +172,16 @@ public class StatusPageService {
                                      boolean pinnedDefault, List<MonitorResponse> monitors,
                                      List<IncidentService.PublicIncident> incidents, List<MaintenanceService.PublicNotice> maintenance) {
         static StatusPageResponse from(StatusPage page) {
-            var monitors = page.getMonitors().stream().filter(m -> page.getOwnerId().equals(m.getOwnerId()))
-                    .map(MonitorResponse::from).sorted(Comparator.comparing(MonitorResponse::name)).toList();
+            List<MonitorResponse> monitors = new ArrayList<>();
+            for (Monitor monitor : page.getMonitors()) {
+                if (page.getOwnerId().equals(monitor.getOwnerId())) {
+                    monitors.add(MonitorResponse.from(monitor));
+                }
+            }
+            // C.DE: Der DTO enthält nur eigene Monitore und sortiert sie wie bisher nach Namen.
+            monitors.sort(Comparator.comparing(MonitorResponse::name));
             return new StatusPageResponse(page.getId(), page.getName(), page.getSlug(), page.getDescription(),
-                    page.isPinnedDefault(), monitors, List.of(), List.of());
+                    page.isPinnedDefault(), List.copyOf(monitors), List.of(), List.of());
         }
     }
 }

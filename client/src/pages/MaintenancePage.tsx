@@ -10,6 +10,7 @@ import { WorkspacePicker } from '../components/WorkspacePicker'
 import { Pagination } from '../components/Pagination'
 
 export function MaintenancePage({ workspaceId }: { workspaceId: number | null }) {
+  // C.DE: useState merkt sich die angezeigten Daten. Ein Setter löst die Darstellung mit dem neuen Wert aus, keine Seitennavigation.
   const [result, setResult] = useState<MaintenanceListing | null>(null)
   const [monitors, setMonitors] = useState<Monitor[]>([])
   const [page, setPage] = useState(0)
@@ -18,6 +19,7 @@ export function MaintenancePage({ workspaceId }: { workspaceId: number | null })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [confirm, setConfirm] = useState<{ window: Maintenance; action: 'cancel' | 'delete' } | null>(null)
+  // C.DE: useRef merkt sich das Bestätigungselement. Die Referenz selbst löst keine neue Darstellung aus.
   const confirmation = useRef<HTMLElement>(null)
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const canEdit = canEditWorkspace(findWorkspace(workspaces, workspaceId))
@@ -25,13 +27,16 @@ export function MaintenancePage({ workspaceId }: { workspaceId: number | null })
 
   useEffect(() => {
     // Bring the confirmation into view for long lists.
+    // C.DE: Nach dem Anzeigen der Bestätigung setzen wir den Fokus darauf. ?. schützt den Fall ohne vorhandenes Element.
     if (confirm) confirmation.current?.focus()
   }, [confirm])
 
+  // C.DE: Dieser Effect lädt beim Öffnen und bei Änderungen von Seite, Refresh-Zähler oder Workspace die passenden Daten.
   useEffect(() => {
     let active = true
     let pending = false
     async function load() {
+      // C.DE: Solange eine Ladeanfrage läuft, startet der Timer keine zweite überlappende Ladeanfrage.
       if (pending) return
       pending = true
       try {
@@ -56,6 +61,7 @@ export function MaintenancePage({ workspaceId }: { workspaceId: number | null })
     }
     void load()
     const interval = window.setInterval(() => void load(), 30000)
+    // C.DE: Cleanup stoppt den alten Timer und ignoriert späte Antworten. Die bereits gesendete Anfrage wird nicht abgebrochen.
     return () => { active = false; window.clearInterval(interval) }
   }, [page, reload, workspaceId])
 

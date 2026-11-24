@@ -23,6 +23,8 @@ public class Maintenance {
     private Long id;
 
     // preventing 2 requests from saving different changes over each other, so we can make sure, that the user is editing the latest version of the maintenance
+    // C.DE: Hibernate lehnt einen Speicherversuch ab, wenn ein anderer Vorgang die geladene Datenbankversion geändert hat.
+    // C.DE: Das ist keine Git-Historie. Ein altes Browserformular wird ohne mitgesendete Version nicht sicher erkannt.
     @Version
     private long version;
 
@@ -50,6 +52,7 @@ public class Maintenance {
     @Column(nullable = false)
     private boolean published;
 
+    // C.DE: Eine Wartung kann mehrere Monitore enthalten und ein Monitor kann zu mehreren Wartungen gehören.
     @ManyToMany
     @JoinTable(name = "maintenance_monitors", joinColumns = @JoinColumn(name = "maintenance_id"),
             inverseJoinColumns = @JoinColumn(name = "monitor_id"))
@@ -60,6 +63,7 @@ public class Maintenance {
     public Maintenance(Long ownerId) { this.ownerId = ownerId; }
 
     // work out the status from the dates... No extra job needs to update it
+    // C.DE: Diese Methode berechnet nur den Status. Genau am Start gilt IN_PROGRESS, genau am Ende COMPLETED, sofern nicht abgesagt.
     public Status statusAt(Instant now) {
         if (cancelled) return Status.CANCELLED;
         if (now.isBefore(startsAt)) return Status.SCHEDULED;

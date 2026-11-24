@@ -64,7 +64,9 @@ public class MaintenanceService {
 
     @Transactional
     public Response save(Long id, SaveRequest input, Long userId, Long workspaceId) {
+        // C.DE: Zusammengehörige SQL-Änderungen werden gemeinsam übernommen oder bei einem Rollback-Fehler zurückgerollt.
         Instant now = Instant.now();
+        // C.DE: Neue Wartungen nutzen den gewählten Workspace. Beim Bearbeiten bleibt der gespeicherte Eigentümer maßgeblich.
         Maintenance window = id == null ? new Maintenance(teams.workspaceOwner(workspaceId, userId, true)) : accessible(id, userId, true);
         Long ownerId = window.getOwnerId();
         if (id != null && window.statusAt(now) != Maintenance.Status.SCHEDULED) {
@@ -73,6 +75,7 @@ public class MaintenanceService {
         if (!input.startsAt().isAfter(now)) throw badRequest("Choose a start time in the future.");
         if (!input.endsAt().isAfter(input.startsAt())) throw badRequest("The end time must be after the start time.");
 
+        // C.DE: Alle ausgewählten Monitore müssen existieren, verschieden sein und zum selben Workspace gehören.
         var selected = monitors.findAllById(input.monitorIds());
         if (selected.size() != input.monitorIds().size()) throw badRequest("Select between 1 and 30 different monitors from this workspace.");
         for (var monitor : selected) {
@@ -156,6 +159,7 @@ public class MaintenanceService {
     }
 
     private Response response(Maintenance window, Instant now) {
+        // C.DE: Der Antwort-DTO enthält die vorgesehenen Felder und Monitor-IDs, nicht die vollständigen Monitorobjekte.
         return new Response(window.getId(), window.getTitle(), window.getDescription(), window.getStartsAt(),
                 window.getEndsAt(), window.statusAt(now), window.isPublished(),
                 window.getMonitors().stream().map(monitor -> monitor.getId()).sorted().toList(), window.getCreatedAt(), window.getOwnerId());

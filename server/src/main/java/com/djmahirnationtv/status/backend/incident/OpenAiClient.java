@@ -94,6 +94,7 @@ public class OpenAiClient {
     }
 
     private String incidentFacts(IncidentService.IncidentResponse incident, String context) {
+        // C.DE: Wir erstellen JSON aus ausgewählten Fakten und eingegebenem Kontext, nicht aus dem ganzen Datenbankobjekt.
         Map<String, String> facts = new HashMap<>();
         facts.put("source", incident.manual() ? "manual report" : "automatic HTTP check");
         facts.put("failure", checkResultForOpenAi(incident.cause()));
@@ -106,6 +107,7 @@ public class OpenAiClient {
 
     static String checkResultForOpenAi(String cause) {
         // Only messages are sent that are relevant to the incident analysis, not all possible messages. (e.g. "HTTP check returned 200." is not sent, but "HTTP check returned 500." is sent.)
+        // C.DE: Der Ausdruck erlaubt nur feste Check-Meldungen. Beliebige interne Fehlertexte werden hier nicht übernommen.
         if ("No HTTP response was received.".equals(cause)
                 || (cause != null && cause.matches("HTTP check returned [1-5][0-9]{2}\\."))) {
             return cause;
@@ -116,6 +118,7 @@ public class OpenAiClient {
     private record Prompt(List<String> instructions) {}
 
     private String loadInstructions(Resource promptFile) {
+        // C.DE: Die Anweisungen kommen beim Start aus einer Ressourcen-JSON. Änderungen brauchen einen Neubuild und Neustart.
         try (var input = promptFile.getInputStream()) {
             Prompt prompt = json.readValue(input, Prompt.class);
             if (prompt == null || prompt.instructions() == null || prompt.instructions().isEmpty()) {
@@ -126,6 +129,7 @@ public class OpenAiClient {
                     throw new IllegalStateException("Incident analysis instructions cannot contain empty lines.");
                 }
             }
+            // C.DE: Die einzelnen Anweisungen werden zu einem Text mit Zeilenumbrüchen zusammengesetzt.
             return String.join("\n", prompt.instructions());
         } catch (IOException | JacksonException exception) {
             throw new IllegalStateException("Could not read openai/incident-analysis.json. Check that the file exists and contains valid JSON.");

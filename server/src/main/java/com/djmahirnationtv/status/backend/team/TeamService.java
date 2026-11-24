@@ -48,6 +48,7 @@ public class TeamService {
     @Transactional
     public Member invite(Long ownerId, String email, TeamMember.Role role) {
         // Lock the owner row so two invitations cannot pass the limit together.
+        // C.DE: Die Datenbank sperrt die Eigentümerzeile bis zum Transaktionsende, damit Einladungen nicht gemeinsam das Limit umgehen.
         var owner = users.lockForSettingsUpdate(ownerId).orElseThrow(() -> notFound());
         var member = users.findByEmail(email.strip().toLowerCase(Locale.ROOT))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ask this person to create an account first."));
@@ -61,6 +62,7 @@ public class TeamService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A workspace can have up to 50 members, including pending invitations.");
         }
         // An invitation does not give access until the other person accepts it.
+        // C.DE: Eine Einladung allein gibt noch keinen Zugriff. Erst die Annahme aktiviert die Mitgliedschaft.
         return summary(members.saveAndFlush(new TeamMember(owner, member, role)));
     }
 
@@ -97,8 +99,10 @@ public class TeamService {
 
     @Transactional(readOnly = true)
     public void requireAccess(Long ownerId, Long userId, boolean editing) {
+        // C.DE: Der Eigentümer darf zugreifen. Andere brauchen eine angenommene Mitgliedschaft und für Änderungen die Editor-Rolle.
         if (ownerId.equals(userId)) return;
         // Read the saved role each time. Removed members cannot keep using old access.
+        // C.DE: Die Datenbankrolle zählt, nicht ein alter Button im Browser. Fehlende Mitgliedschaft ergibt 404, Viewer-Änderungen 403.
         TeamMember membership = members.findByOwnerIdAndMemberIdAndAcceptedTrue(ownerId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found."));
         if (editing && membership.getRole() != TeamMember.Role.EDITOR) {

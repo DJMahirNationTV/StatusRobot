@@ -31,13 +31,16 @@ public class WebhookSecrets {
     public boolean configured() { return key != null; }
 
     public String encrypt(String value) {
+        // C.DE: Webhook-URLs werden verschlüsselt statt gehasht, weil der Server die echte URL zum Senden wieder benötigt.
         requireKey();
         byte[] nonce = new byte[12];
+        // C.DE: Jede Verschlüsselung bekommt einen zufälligen Startwert, der zusammen mit dem verschlüsselten Text gespeichert wird.
         random.nextBytes(nonce);
         try {
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(128, nonce));
             byte[] encrypted = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
+            // C.DE: Base64 macht die Bytes als Text speicherbar. Die eigentliche Verschlüsselung übernimmt AES-GCM, nicht Base64.
             return Base64.getEncoder().encodeToString(ByteBuffer.allocate(nonce.length + encrypted.length)
                     .put(nonce).put(encrypted).array());
         } catch (GeneralSecurityException exception) {
@@ -46,6 +49,7 @@ public class WebhookSecrets {
     }
 
     public String decrypt(String value) {
+        // C.DE: Wir trennen Startwert und verschlüsselte Daten und entschlüsseln mit dem konfigurierten Schlüssel.
         requireKey();
         try {
             ByteBuffer data = ByteBuffer.wrap(Base64.getDecoder().decode(value));

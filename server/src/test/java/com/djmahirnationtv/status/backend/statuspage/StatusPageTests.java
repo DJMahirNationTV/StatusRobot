@@ -125,6 +125,62 @@ class StatusPageTests {
     }
 
     @Test
+    void duplicateMonitorIdsProduceOnlyOneSelection() {
+        var input = new StatusPageRequest("Status", "duplicate-selection", "",
+                List.of(monitor.getId(), monitor.getId()), false);
+        var page = service.save(null, input, ownerId);
+        assertThat(page.monitors()).hasSize(1);
+        assertThat(service.bySlug(page.slug()).monitors()).hasSize(1);
+    }
+
+    @Test
+    void savingTheSameAddressAndPinningTheSamePageStillWork() {
+        var page = service.save(null, settings("same-page", true), ownerId);
+        service.pin(page.id(), true, ownerId);
+        var updated = service.save(page.id(), settings("same-page", true), ownerId);
+        assertThat(updated.id()).isEqualTo(page.id());
+        assertThat(service.defaultPage().id()).isEqualTo(page.id());
+        assertThat(pages.count()).isEqualTo(1);
+    }
+
+    @Test
+    void missingMonitorsAndReservedAddressesAreRejected() {
+        var missing = new StatusPageRequest("Status", "missing-selection", "", List.of(Long.MAX_VALUE), false);
+        assertThatThrownBy(() -> service.save(null, missing, ownerId)).hasMessageContaining("400");
+        for (String slug : List.of("mine", "default")) {
+            assertThatThrownBy(() -> service.save(null, settings(slug, false), ownerId)).hasMessageContaining("409");
+        }
+        assertThat(pages.count()).isZero();
+    }
+
+    @Test
+    void publicMonitorsStaySortedAndForeignMonitorsAreHidden() {
+        var api = new Monitor("API", "https://example.com/api", "GET", 60, 5);
+        api.setOwnerId(ownerId);
+        api = monitors.saveAndFlush(api);
+        var input = new StatusPageRequest("Status", "sorted-page", "", List.of(monitor.getId(), api.getId()), false);
+        var page = service.save(null, input, ownerId);
+        assertThat(page.monitors().getFirst().name()).isEqualTo("API");
+        assertThat(page.monitors().getLast().name()).isEqualTo("Website");
+
+        monitor.setOwnerId(otherId);
+        monitors.saveAndFlush(monitor);
+        var visible = service.bySlug(page.slug()).monitors();
+        assertThat(visible).hasSize(1);
+        assertThat(visible.getFirst().name()).isEqualTo("API");
+    }
+
+    @Test
+    void otherAccountsCanEditTheirOwnUnpinnedPages() {
+        var input = new StatusPageRequest("Other", "other-edit", "", List.of(), false);
+        var page = service.save(null, input, otherId);
+        var updated = service.save(page.id(), new StatusPageRequest("Renamed", "other-edit", "", List.of(), false), otherId);
+        assertThat(updated.name()).isEqualTo("Renamed");
+        assertThat(updated.pinnedDefault()).isFalse();
+        assertThat(service.mine(otherId).canPinDefault()).isFalse();
+    }
+
+    @Test
     void changesRequireAuthenticationOwnershipCsrfAndDefaultPermission() throws Exception {
         var page = service.save(null, settings("owner-page", false), ownerId);
         String path = "/api/status-pages/" + page.id();

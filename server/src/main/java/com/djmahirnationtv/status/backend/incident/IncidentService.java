@@ -21,6 +21,7 @@ public class IncidentService {
     private final MonitorRepository monitors;
     private final TeamService teams;
 
+    // C.DE: Spring übergibt die Repositories und den Team-Service. Diese Klasse erstellt sie nicht selbst mit new.
     public IncidentService(IncidentRepository incidents, MonitorRepository monitors, TeamService teams) {
         this.incidents = incidents;
         this.monitors = monitors;
@@ -29,9 +30,11 @@ public class IncidentService {
 
     @Transactional
     public void recordCheck(Monitor monitor, int statusCode) {
+        // C.DE: Eine wahre ODER-Bedingung reicht. return beendet nur diesen Aufruf, ohne einen Wert zurückzugeben.
         if (monitor.getOwnerId() == null || monitor.getLastCheckedAt() == null
                 || monitor.getStatus() == MonitorStatus.PAUSED) return;
 
+        // C.DE: Wiederholte Fehler verwenden den offenen automatischen Incident statt für jeden Check einen neuen anzulegen.
         var open = incidents.findByOpenMonitorId(monitor.getId());
         if (monitor.getStatus() == MonitorStatus.DOWN) {
             if (open.isEmpty()) {
@@ -41,6 +44,7 @@ public class IncidentService {
                         cause, monitor.getLastCheckedAt()));
             }
         } else {
+            // C.DE: ifPresent führt die Aktion nur bei einem vorhandenen Incident aus. Ein erfolgreicher Check schließt ihn.
             open.ifPresent(incident -> incident.resolve(monitor.getLastCheckedAt()));
         }
     }
@@ -55,6 +59,7 @@ public class IncidentService {
                                    Instant startedAt, Instant resolvedAt, String title, boolean manual,
                                    boolean published, Incident.Stage stage, List<UpdateResponse> updates, Long workspaceId) {
         static IncidentResponse from(Incident incident) {
+            // C.DE: map ruft für jedes Update UpdateResponse.from auf. toList sammelt die DTOs, ohne Daten zu speichern.
             return new IncidentResponse(incident.getId(), incident.getMonitorId(), incident.getMonitorName(),
                     incident.getCause(), incident.getStartedAt(), incident.getResolvedAt(), incident.getTitle(),
                     incident.isManual(), incident.isPublished(), incident.getStage(),
@@ -73,6 +78,7 @@ public class IncidentService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Monitor not found."));
         teams.requireAccess(monitor.getOwnerId(), userId, true);
         // Shared incidents belong to the monitor's workspace, not the editor.
+        // C.DE: Der angemeldete Editor handelt, aber der neue Incident gehört weiterhin dem Workspace-Eigentümer.
         return IncidentResponse.from(incidents.saveAndFlush(Incident.manual(monitor.getOwnerId(), monitor.getId(),
                 monitor.getName(), input.title().strip(), input.message().strip())));
     }
@@ -100,6 +106,7 @@ public class IncidentService {
     }
 
     private Incident accessible(Long id, Long userId, boolean editing) {
+        // C.DE: orElseThrow liefert den gefundenen Datensatz oder bricht diesen Request mit 404 ab.
         Incident incident = incidents.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found."));
         teams.requireAccess(incident.getOwnerId(), userId, editing);
@@ -141,6 +148,7 @@ public class IncidentService {
         if (page < 0 || page > 100_000) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a valid page number.");
         }
+        // C.DE: Wir laden höchstens 20 Incidents pro Seite, neueste zuerst. Die erste Seite hat die Nummer 0.
         var paging = PageRequest.of(page, 20, Sort.by(Sort.Direction.DESC, "startedAt", "id"));
         var result = switch (status) {
             case "all" -> incidents.findByOwnerId(ownerId, paging);

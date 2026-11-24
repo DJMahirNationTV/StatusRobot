@@ -15,6 +15,17 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     Page<Incident> findByOwnerIdAndResolvedAtIsNull(Long ownerId, Pageable pageable);
     Page<Incident> findByOwnerIdAndResolvedAtIsNotNull(Long ownerId, Pageable pageable);
     void deleteByMonitorId(Long monitorId);
+/* [SQL STATEMENT]
+SELECT *
+FROM incident i
+WHERE i.owner_id = :owner_id
+  AND i.monitor_id IN (:monitor_ids)
+  AND i.is_published = TRUE
+ORDER BY
+  CASE WHEN i.resolved_at IS NULL THEN 0 ELSE 1 END,
+  i.started_at DESC,
+  i.id DESC;
+*/
 
     @Query("""
             select i from Incident i where i.ownerId = :ownerId and i.monitorId in :monitorIds and i.published = true

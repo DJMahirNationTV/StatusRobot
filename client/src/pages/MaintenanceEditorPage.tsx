@@ -10,6 +10,7 @@ import { teamApi, findWorkspace, canEditWorkspace, workspaceQuery } from '../ser
 export function MaintenanceEditorPage({ maintenanceId, workspaceId }: { maintenanceId: number | null; workspaceId: number | null }) {
   const [data, setData] = useState<{ maintenance: Maintenance | null; monitors: Monitor[]; workspaceId: number | null } | null>(null)
   const query = workspaceQuery(data ? data.workspaceId : workspaceId)
+  // C.DE: title enthält den Formulartext. setTitle aktualisiert die React-Anzeige, speichert aber noch nichts im Backend.
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [startsAt, setStartsAt] = useState('')
@@ -47,6 +48,7 @@ export function MaintenanceEditorPage({ maintenanceId, workspaceId }: { maintena
   }, [maintenanceId, workspaceId, attempt])
 
   async function save(event: FormEvent<HTMLFormElement>) {
+    // C.DE: preventDefault verhindert das normale Neuladen des Formulars. Wir senden die Daten über unseren Axios-Service.
     event.preventDefault()
     if (busy || !data) return
     setError('')
@@ -135,12 +137,14 @@ export function MaintenanceEditorPage({ maintenanceId, workspaceId }: { maintena
 }
 
 function toLocalDateTime(value: string) {
+  // C.DE: Das Eingabefeld braucht lokale Uhrzeit ohne Zeitzonenkennung. Wir passen den UTC-Zeitwert dafür an.
   const date = new Date(value)
   // local time without the timezone suffix (like Z00 or something like that)
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
 function toUtc(value: string, saved?: string) {
+  // C.DE: Zum Speichern wandeln wir die lokale Eingabe in UTC um. Unveränderte Felder behalten den genauen ursprünglichen Zeitpunkt.
   // Keep the original time when an existing field has not changed.
   if (saved && value === toLocalDateTime(saved)) return saved
   const date = new Date(value)

@@ -26,10 +26,12 @@ public class AuthService implements UserDetailsService {
     }
 
     public AppUser register(String email, String password) {
+        // C.DE: Bcrypt verarbeitet hier höchstens 72 UTF-8-Bytes. Sonderzeichen können mehr als ein Byte benötigen.
         if (password.getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at most 72 UTF-8 bytes.");
         }
         try {
+            // C.DE: Gespeichert wird der Passwort-Hash, nicht das Klartextpasswort. Der Hash wird nicht entschlüsselt.
             return users.saveAndFlush(new AppUser(normalizeEmail(email), passwords.encode(password), "local", null));
         } catch (DataIntegrityViolationException exception) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Unable to register this email. Try signing in.");
@@ -38,6 +40,7 @@ public class AuthService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) {
+        // C.DE: Wir liefern Konto und gespeicherten Hash. Spring Security prüft das eingegebene Passwort mit dem PasswordEncoder.
         AppUser user = users.findByEmail(normalizeEmail(email))
                 .filter(account -> account.getPasswordHash() != null)
                 .orElseThrow(() -> new UsernameNotFoundException("Invalid email or password."));

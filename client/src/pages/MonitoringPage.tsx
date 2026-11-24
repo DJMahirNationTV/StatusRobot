@@ -78,6 +78,7 @@ export function MonitoringPage({ workspaceId }: { workspaceId: number | null }) 
     try {
       if (remove) {
         await monitorApi.remove(monitor.id)
+        // Remove the monitor from the list and reset the deleting state
         setMonitors((list) => list.filter((item) => item.id !== monitor.id))
         setDeleting(null)
         setNotice('Monitor, check history and incidents deleted.')

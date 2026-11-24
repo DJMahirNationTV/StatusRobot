@@ -39,6 +39,7 @@ public class PingExecutionService {
 
     @Transactional
     public void ping(Monitor monitor) {
+        // C.DE: Die Transaktion betrifft MySQL. HTTP-Anfragen und bereits gespeicherte MongoDB-Logs werden nicht zurückgerollt.
         MonitorStatus previousStatus = monitor.getStatus();
         long start = System.currentTimeMillis();
         int statusCode = 0;
@@ -58,6 +59,7 @@ public class PingExecutionService {
                     });
 
             statusCode = response.statusCode();
+            // C.DE: HTTP-Codes von 200 bis 399 gelten hier als erfolgreich. Netzwerkfehler werden als fehlgeschlagen erfasst.
             success = statusCode >= 200 && statusCode < 400;
         } catch (Exception ex) {
             errorMessage = ex.getMessage();
@@ -72,6 +74,7 @@ public class PingExecutionService {
         pingLogRepository.save(pingLog);
 
         // we update the state in mysql basically..
+        // C.DE: Fehlgeschlagen bedeutet DOWN. Erfolgreich, aber langsamer als 1500 ms bedeutet DEGRADED, sonst UP.
         monitor.setLastCheckedAt(Instant.now());
         if (!success) {
             monitor.setStatus(MonitorStatus.DOWN);
@@ -84,6 +87,7 @@ public class PingExecutionService {
         monitorRepository.saveAndFlush(monitor);
         incidents.recordCheck(monitor, statusCode);
         boolean down = monitor.getStatus() == MonitorStatus.DOWN;
+        // C.DE: Ein Alert-Ereignis entsteht beim Wechsel zu DOWN oder bei Erholung, nicht bei jedem weiteren gleichen Ergebnis.
         if (previousStatus != MonitorStatus.PAUSED && down != (previousStatus == MonitorStatus.DOWN)) {
             events.publishEvent(new MonitorStatusChanged(monitor.getId(), monitor.getOwnerId(), monitor.getName(), down));
         }
